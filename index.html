@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mundo Avaloria</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      min-height:100vh;
+      background:radial-gradient(ellipse at top, #4a2c0a 0%, #1a0e04 60%);
+      font-family: Georgia, 'Times New Roman', serif;
+      overflow-x:hidden;
+      color:#e8c87a;
+    }
+
+    .stars { position:fixed; inset:0; pointer-events:none; z-index:0; }
+    .star {
+      position:absolute; background:#ffd700; border-radius:50%; opacity:0;
+      animation:twinkle var(--dur) var(--delay) infinite ease-in-out;
+    }
+    @keyframes twinkle {
+      0%,100%{opacity:0;transform:scale(.5)} 50%{opacity:.9;transform:scale(1.2)}
+    }
+    .magic-particle {
+      position:fixed; pointer-events:none; font-size:1.1rem;
+      animation:rise var(--dur) var(--delay) infinite ease-in; opacity:0; z-index:0;
+    }
+    @keyframes rise {
+      0%{opacity:0;transform:translateY(100vh) rotate(0deg)}
+      20%{opacity:.8} 80%{opacity:.6}
+      100%{opacity:0;transform:translateY(-10vh) rotate(360deg)}
+    }
+
+    /* Banderines */
+    .banners { position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-around; z-index:10; padding:0 10px; }
+    .banner-rope { width:100%; height:30px; border-bottom:3px solid #8b6914; position:absolute; top:28px; }
+    .pennant {
+      width:0; height:0;
+      border-left:18px solid transparent; border-right:18px solid transparent; border-top:46px solid var(--c);
+      filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));
+      animation:sway 3s ease-in-out infinite; animation-delay:var(--delay);
+    }
+    @keyframes sway { 0%,100%{transform:rotate(-5deg)} 50%{transform:rotate(5deg)} }
+
+    /* ══ INICIO ══ */
+    #page-home {
+      min-height:100vh; display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      position:relative; z-index:2; padding-top:70px;
+      transition:opacity .5s, transform .5s;
+    }
+    #page-home.hidden { opacity:0; transform:scale(.95); pointer-events:none; position:absolute; }
+
+    .castle-frame { position:relative; text-align:center; padding:60px 40px 50px; max-width:700px; width:90%; }
+    .frame-border {
+      position:absolute; inset:0; border:3px solid #8b6914; border-radius:16px;
+      background:rgba(10,5,0,.65); backdrop-filter:blur(2px); z-index:-1;
+      box-shadow:inset 0 0 40px rgba(0,0,0,.5),0 0 30px rgba(255,160,0,.15),0 0 0 6px #3a1f00,0 0 0 9px #8b6914;
+    }
+    .castle-frame::before,.castle-frame::after { content:'🏰'; position:absolute; font-size:2.8rem; top:10px; filter:drop-shadow(0 0 8px #ffd70088); }
+    .castle-frame::before { left:8px; }
+    .castle-frame::after  { right:8px; }
+
+    .shield { font-size:4rem; display:block; margin-bottom:10px; animation:float 4s ease-in-out infinite; filter:drop-shadow(0 0 12px #ffd700); }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+
+    h1 {
+      font-size:clamp(2.2rem,7vw,4.2rem); font-weight:bold; color:#ffd700;
+      text-transform:uppercase; letter-spacing:4px;
+      text-shadow:0 0 10px #ffa500,0 0 25px #ff6600,2px 2px 0 #5c3300,4px 4px 0 #3a1f00;
+      line-height:1.2; margin-bottom:10px;
+    }
+    .subtitle { color:#e8c87a; font-size:1.05rem; font-style:italic; margin-bottom:22px; letter-spacing:1px; }
+    .divider { display:flex; align-items:center; gap:12px; justify-content:center; margin:0 0 24px; color:#c8a84b; font-size:1.2rem; }
+    .divider-line { flex:1; max-width:120px; height:2px; background:linear-gradient(to right,transparent,#c8a84b,transparent); }
+    .animals-row { display:flex; justify-content:center; gap:14px; margin-bottom:32px; flex-wrap:wrap; }
+    .animal-badge {
+      background:rgba(255,200,80,.12); border:2px solid #8b6914; border-radius:12px;
+      padding:10px 14px; font-size:1.8rem; cursor:pointer; transition:all .3s ease;
+    }
+    .animal-badge:hover { transform:translateY(-4px) scale(1.1); background:rgba(255,200,80,.25); border-color:#ffd700; }
+    .animal-badge .label { display:block; font-size:.52rem; color:#e8c87a; margin-top:4px; text-transform:uppercase; letter-spacing:1px; }
+    .tagline { margin-top:26px; color:#c8a84b; font-size:.82rem; letter-spacing:1px; }
+    .tagline span { color:#ffd700; }
+
+    .btn-medieval {
+      display:inline-block; padding:18px 48px;
+      font-family:Georgia,serif; font-size:1.05rem; font-weight:bold;
+      color:#2b1000; background:linear-gradient(135deg,#ffd700 0%,#ff9900 50%,#ffd700 100%);
+      border:none; border-radius:6px; cursor:pointer;
+      text-transform:uppercase; letter-spacing:3px;
+      box-shadow:0 4px 0 #7a4d00,0 6px 15px rgba(255,140,0,.5),inset 0 1px 0 rgba(255,255,255,.4);
+      transition:all .2s ease;
+    }
+    .btn-medieval::before { content:'⚔️'; margin-right:10px; }
+    .btn-medieval::after  { content:'⚔️'; margin-left:10px; }
+    .btn-medieval:hover { transform:translateY(-3px); box-shadow:0 7px 0 #7a4d00,0 10px 25px rgba(255,140,0,.7); }
+    .btn-medieval:active { transform:translateY(2px); }
+
+    /* ══ TIENDA ══ */
+    #page-shop {
+      display:none; min-height:100vh; position:relative; z-index:2;
+      padding:80px 20px 60px;
+      opacity:0; transform:translateY(30px); transition:opacity .5s,transform .5s;
+    }
+    #page-shop.visible { display:block; }
+    #page-shop.animated { opacity:1; transform:translateY(0); }
+
+    .shop-header { text-align:center; margin-bottom:10px; }
+    .shop-title {
+      font-size:clamp(1.8rem,5vw,3rem); font-weight:bold; color:#ffd700;
+      text-transform:uppercase; letter-spacing:3px;
+      text-shadow:0 0 10px #ffa500,2px 2px 0 #3a1f00;
+    }
+    .shop-subtitle { color:#c8a84b; font-style:italic; margin-top:6px; font-size:.95rem; }
+
+    /* Carrito */
+    .cart-bar {
+      display:flex; align-items:center; justify-content:center; gap:16px;
+      margin:18px auto 28px; background:rgba(255,200,80,.1); border:2px solid #8b6914;
+      border-radius:40px; padding:12px 30px; max-width:560px;
+      box-shadow:0 0 15px rgba(255,160,0,.15); flex-wrap:wrap;
+    }
+    .cart-icon { font-size:1.6rem; }
+    .cart-text { color:#e8c87a; font-size:.95rem; }
+    .cart-total { color:#ffd700; font-weight:bold; font-size:1.05rem; }
+    .cart-clear { background:none; border:1px solid #8b6914; color:#c8a84b; border-radius:20px; padding:4px 12px; cursor:pointer; font-size:.8rem; transition:all .2s; }
+    .cart-clear:hover { border-color:#ffd700; color:#ffd700; }
+
+    /* Oferta */
+    .offer-banner {
+      text-align:center; margin:0 auto 30px;
+      background:linear-gradient(135deg,#7a1f00,#c0392b,#7a1f00);
+      border:2px solid #ff6644; border-radius:10px; padding:12px 24px; max-width:460px;
+      animation:pulse-offer 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse-offer { 0%,100%{box-shadow:0 0 20px rgba(255,80,0,.3)} 50%{box-shadow:0 0 35px rgba(255,80,0,.6)} }
+    .offer-banner p { color:#fff; font-size:1rem; letter-spacing:1px; }
+    .offer-banner strong { color:#ffd700; font-size:1.2rem; }
+
+    /* Filtros */
+    .filters {
+      display:flex; justify-content:center; gap:10px; margin-bottom:28px; flex-wrap:wrap;
+    }
+    .filter-btn {
+      background:rgba(255,200,80,.1); border:1px solid #8b6914; color:#c8a84b;
+      border-radius:20px; padding:6px 16px; cursor:pointer; font-size:.82rem;
+      font-family:Georgia,serif; transition:all .2s; text-transform:uppercase; letter-spacing:1px;
+    }
+    .filter-btn:hover, .filter-btn.active { background:rgba(255,200,80,.25); border-color:#ffd700; color:#ffd700; }
+
+    /* Grid */
+    .products-grid {
+      display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+      gap:24px; max-width:1100px; margin:0 auto;
+    }
+
+    .product-card {
+      background:rgba(10,5,0,.72); border:2px solid #8b6914; border-radius:14px;
+      padding:0 0 18px; text-align:center; transition:all .3s ease;
+      position:relative; overflow:hidden; display:flex; flex-direction:column;
+    }
+    .product-card:hover { transform:translateY(-6px); border-color:#ffd700; box-shadow:0 8px 30px rgba(255,160,0,.4); }
+
+    .product-img-wrap {
+      width:100%; aspect-ratio:1; overflow:hidden;
+      border-radius:12px 12px 0 0; background:#0a0500;
+    }
+    .product-img-wrap img {
+      width:100%; height:100%; object-fit:cover;
+      transition:transform .4s ease;
+    }
+    .product-card:hover .product-img-wrap img { transform:scale(1.08); }
+
+    .product-info { padding:14px 14px 0; flex:1; display:flex; flex-direction:column; }
+    .product-name { font-size:1rem; font-weight:bold; color:#ffd700; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:4px; }
+    .product-desc { font-size:.74rem; color:#a8876a; font-style:italic; margin-bottom:12px; line-height:1.4; flex:1; }
+
+    .price-block { margin-bottom:12px; }
+    .price-unit { font-size:1.4rem; font-weight:bold; color:#ffd700; display:block; }
+    .price-unit span { font-size:.8rem; color:#c8a84b; font-weight:normal; }
+    .price-offer {
+      display:inline-block; margin-top:5px;
+      background:rgba(192,57,43,.3); border:1px solid #c0392b;
+      border-radius:20px; padding:3px 12px; font-size:.78rem; color:#ff9980; letter-spacing:.5px;
+    }
+
+    .btn-buy {
+      margin:0 14px; padding:10px 0;
+      font-family:Georgia,serif; font-size:.86rem; font-weight:bold;
+      color:#2b1000; text-transform:uppercase; letter-spacing:2px;
+      background:linear-gradient(135deg,#ffd700 0%,#ff9900 50%,#ffd700 100%);
+      border:none; border-radius:8px; cursor:pointer;
+      box-shadow:0 3px 0 #7a4d00,inset 0 1px 0 rgba(255,255,255,.4);
+      transition:all .2s;
+    }
+    .btn-buy:hover { transform:translateY(-2px); box-shadow:0 5px 0 #7a4d00,0 8px 15px rgba(255,140,0,.5); }
+    .btn-buy:active { transform:translateY(1px); }
+    .btn-buy.added { background:linear-gradient(135deg,#2ecc71,#27ae60); color:#fff; }
+
+    .badge-new {
+      position:absolute; top:10px; right:10px;
+      background:#c0392b; color:#fff; font-size:.6rem; font-weight:bold;
+      padding:3px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:1px;
+      z-index:2;
+    }
+
+    /* Botón volver */
+    .btn-back {
+      display:block; margin:40px auto 0; padding:12px 32px;
+      font-family:Georgia,serif; font-size:.9rem; color:#c8a84b; background:transparent;
+      border:2px solid #8b6914; border-radius:8px; cursor:pointer;
+      letter-spacing:2px; text-transform:uppercase; transition:all .2s;
+    }
+    .btn-back:hover { border-color:#ffd700; color:#ffd700; }
+
+    /* Toast */
+    .toast {
+      position:fixed; bottom:30px; left:50%; transform:translateX(-50%) translateY(80px);
+      background:rgba(10,5,0,.94); border:2px solid #ffd700; border-radius:30px;
+      padding:12px 28px; color:#ffd700; font-size:.93rem; letter-spacing:1px;
+      z-index:100; transition:transform .3s ease; white-space:nowrap; pointer-events:none;
+    }
+    .toast.show { transform:translateX(-50%) translateY(0); }
+
+    /* Modal imagen */
+    .modal-overlay {
+      display:none; position:fixed; inset:0; z-index:200;
+      background:rgba(0,0,0,.85); align-items:center; justify-content:center;
+      cursor:pointer;
+    }
+    .modal-overlay.open { display:flex; }
+    .modal-overlay img { max-width:90vw; max-height:88vh; border-radius:12px; border:3px solid #ffd700; box-shadow:0 0 40px rgba(255,160,0,.4); }
+  </style>
+</head>
+<body>
+
+  <div class="stars" id="stars"></div>
+  <div id="particles"></div>
+  <div class="toast" id="toast"></div>
+  <div class="modal-overlay" id="modal" onclick="closeModal()">
+    <img id="modal-img" src="" alt="" />
+  </div>
+
+  <div class="banners">
+    <div class="banner-rope"></div>
+    <div class="pennant" style="--c:#c0392b;--delay:0s"></div>
+    <div class="pennant" style="--c:#2980b9;--delay:.3s"></div>
+    <div class="pennant" style="--c:#27ae60;--delay:.6s"></div>
+    <div class="pennant" style="--c:#f39c12;--delay:.9s"></div>
+    <div class="pennant" style="--c:#8e44ad;--delay:1.2s"></div>
+    <div class="pennant" style="--c:#c0392b;--delay:1.5s"></div>
+    <div class="pennant" style="--c:#2980b9;--delay:1.8s"></div>
+    <div class="pennant" style="--c:#27ae60;--delay:2.1s"></div>
+    <div class="pennant" style="--c:#f39c12;--delay:2.4s"></div>
+    <div class="pennant" style="--c:#8e44ad;--delay:2.7s"></div>
+  </div>
+
+  <!-- INICIO -->
+  <div id="page-home">
+    <div class="castle-frame">
+      <div class="frame-border"></div>
+      <span class="shield">🛡️</span>
+      <h1>Mundo Avaloria</h1>
+      <p class="subtitle">✨ El reino de los tesoros mágicos ✨</p>
+      <div class="divider"><div class="divider-line"></div>🌿<div class="divider-line"></div></div>
+      <div class="animals-row">
+        <div class="animal-badge">🦁<span class="label">Leones</span></div>
+        <div class="animal-badge">🐉<span class="label">Dragones</span></div>
+        <div class="animal-badge">🦊<span class="label">Zorros</span></div>
+        <div class="animal-badge">🦅<span class="label">Águilas</span></div>
+        <div class="animal-badge">🐺<span class="label">Lobos</span></div>
+      </div>
+      <button class="btn-medieval" onclick="goToShop()">¡Explorar el reino!</button>
+      <p class="tagline">Maquetas · Animales · Figuras · <span>Magia para los pequeños héroes</span></p>
+    </div>
+  </div>
+
+  <!-- TIENDA -->
+  <div id="page-shop">
+    <div class="shop-header">
+      <div class="shop-title">🏪 La Tienda del Reino</div>
+      <p class="shop-subtitle">Elige tu figura mágica favorita ✨</p>
+    </div>
+
+    <div class="cart-bar">
+      <span class="cart-icon">🛒</span>
+      <span class="cart-text">Carrito:</span>
+      <span class="cart-total" id="cart-total">0 artículos — 0,00 €</span>
+      <button class="cart-clear" onclick="clearCart()">Vaciar</button>
+    </div>
+
+    <div class="offer-banner">
+      <p>🔥 ¡Oferta especial del reino! 🔥</p>
+      <p><strong>3 figuras por solo 12 €</strong> (ahorro de 3 €)</p>
+    </div>
+
+    <div class="filters" id="filters"></div>
+    <div class="products-grid" id="products-grid"></div>
+    <button class="btn-back" onclick="goToHome()">← Volver al inicio</button>
+  </div>
+
+  <script>
+    const PRODUCTS = [
+      { id:1,  file:'ABEJA MUJER.png',      name:'Abeja Reina',        desc:'La valiente abeja de la colmena encantada',  cat:'Animales',   badge:true  },
+      { id:2,  file:'ABEJAS.png',            name:'Colmena Mágica',     desc:'Un mundo de abejas dulces y trabajadoras',   cat:'Animales',   badge:false },
+      { id:3,  file:'BANCO NIEVE.png',       name:'Banco de Nieve',     desc:'Un rincón helado del bosque invernal',        cat:'Escenas',    badge:false },
+      { id:4,  file:'BOSQUE ROSA.png',       name:'Bosque Rosa',        desc:'El bosque encantado de los sueños rosados',  cat:'Escenas',    badge:false },
+      { id:5,  file:'BURROS.png',            name:'Burros del Valle',   desc:'Los fieles compañeros del reino',            cat:'Animales',   badge:false },
+      { id:6,  file:'CASA ABEJAS.png',       name:'Casa de Abejas',     desc:'La cabaña dulce donde viven las abejas',     cat:'Escenas',    badge:false },
+      { id:7,  file:'CASA DE HADAS.png',     name:'Casa de Hadas',      desc:'La casita mágica donde descansan las hadas', cat:'Escenas',    badge:true  },
+      { id:8,  file:'CERDOS BEBE.png',       name:'Cerditos Bebé',      desc:'Los más tiernos del reino rosado',           cat:'Animales',   badge:true  },
+      { id:9,  file:'CIERVA.png',            name:'Cierva del Bosque',  desc:'La elegante guardiana del bosque mágico',    cat:'Animales',   badge:false },
+      { id:10, file:'DINO ARQUEOLOGO.png',   name:'Dino Arqueólogo',    desc:'El dinosaurio explorador de civilizaciones', cat:'Fantásticos',badge:true  },
+      { id:11, file:'DINO.png',              name:'Dinosaurio',         desc:'El gran gigante del mundo prehistórico',     cat:'Fantásticos',badge:false },
+      { id:12, file:'DRAGON AGUA.png',       name:'Dragón de Agua',     desc:'Señor de los mares y las tormentas',         cat:'Fantásticos',badge:true  },
+      { id:13, file:'ESQUELETICO.png',       name:'Esquelético',        desc:'El caballero de los mundos olvidados',       cat:'Fantásticos',badge:false },
+      { id:14, file:'GRANJA.png',            name:'Granja Feliz',       desc:'Todos los amigos de la granja juntos',       cat:'Animales',   badge:false },
+      { id:15, file:'HADAS.png',             name:'Hadas del Bosque',   desc:'Las guardianas mágicas de Avaloria',         cat:'Fantásticos',badge:false },
+      { id:16, file:'HALLOWEN.png',          name:'Halloween',          desc:'La noche más mágica y misteriosa del año',   cat:'Fantásticos',badge:false },
+      { id:17, file:'LEON MARINO.png',       name:'León Marino',        desc:'El rey de las olas del reino de Avaloria',   cat:'Animales',   badge:false },
+      { id:18, file:'LOBO INVIERNO.png',     name:'Lobo de Invierno',   desc:'El guardián de las nieves eternas',          cat:'Animales',   badge:true  },
+      { id:19, file:'PAPA NOEL.png',         name:'Papá Noel',          desc:'El mago de los regalos y la magia navideña', cat:'Escenas',    badge:false },
+      { id:20, file:'PERRO ASTRONAUTA.png',  name:'Perro Astronauta',   desc:'El explorador valiente del espacio exterior',cat:'Fantásticos',badge:true  },
+      { id:21, file:'TIENDA JAPONESA.png',   name:'Tienda Japonesa',    desc:'Un rincón mágico del lejano oriente',        cat:'Escenas',    badge:false },
+      { id:22, file:'TORO SEVILLANA.png',    name:'Toro Sevillano',     desc:'El orgulloso toro con traje de fiesta',      cat:'Animales',   badge:false },
+      { id:23, file:'UNICORNIOS.png',        name:'Unicornios',         desc:'Las criaturas más mágicas de Avaloria',      cat:'Fantásticos',badge:true  },
+      { id:24, file:'VACA EMO.png',          name:'Vaca Emo',           desc:'La vaca más moderna y especial del reino',   cat:'Animales',   badge:false },
+      { id:25, file:'ZOMBIES.png',           name:'Zombies',            desc:'Los valientes del mundo del más allá',       cat:'Fantásticos',badge:false },
+      { id:26, file:'ZORROS.png',            name:'Zorros',             desc:'Los astutos mensajeros del bosque mágico',   cat:'Animales',   badge:false },
+    ];
+
+    const PRICE_UNIT = 5, PRICE_OFFER = 12, OFFER_QTY = 3;
+    let cart = {}, activeFilter = 'Todos';
+
+    function calcTotal(){
+      const u = Object.values(cart).reduce((a,b)=>a+b,0);
+      return Math.floor(u/OFFER_QTY)*PRICE_OFFER + (u%OFFER_QTY)*PRICE_UNIT;
+    }
+    function updateCartBar(){
+      const u = Object.values(cart).reduce((a,b)=>a+b,0);
+      document.getElementById('cart-total').textContent =
+        `${u} artículo${u!==1?'s':''} — ${calcTotal().toFixed(2).replace('.',',')} €`;
+    }
+    function addToCart(id, btn){
+      cart[id] = (cart[id]||0) + 1;
+      updateCartBar();
+      btn.textContent = '✓ ¡Añadido!'; btn.classList.add('added');
+      const p = PRODUCTS.find(x=>x.id===id);
+      showToast(`${p.name} añadido al carrito 🛒`);
+      setTimeout(()=>{ btn.textContent='🛒 Añadir'; btn.classList.remove('added'); }, 1500);
+    }
+    function clearCart(){ cart={}; updateCartBar(); showToast('🗑️ Carrito vaciado'); }
+
+    function showToast(msg){
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'), 2200);
+    }
+
+    function openModal(src){
+      document.getElementById('modal-img').src = src;
+      document.getElementById('modal').classList.add('open');
+    }
+    function closeModal(){ document.getElementById('modal').classList.remove('open'); }
+
+    const CATS = ['Todos','Animales','Fantásticos','Escenas'];
+
+    function renderFilters(){
+      document.getElementById('filters').innerHTML = CATS.map(c=>`
+        <button class="filter-btn ${c===activeFilter?'active':''}" onclick="setFilter('${c}')">${c}</button>
+      `).join('');
+    }
+
+    function setFilter(cat){
+      activeFilter = cat;
+      renderFilters();
+      renderProducts();
+    }
+
+    function renderProducts(){
+      const list = activeFilter==='Todos' ? PRODUCTS : PRODUCTS.filter(p=>p.cat===activeFilter);
+      document.getElementById('products-grid').innerHTML = list.map(p=>`
+        <div class="product-card">
+          ${p.badge?'<span class="badge-new">Nuevo</span>':''}
+          <div class="product-img-wrap" onclick="openModal('imagenes/${encodeURIComponent(p.file)}')" style="cursor:zoom-in" title="Ver más grande">
+            <img src="imagenes/${encodeURIComponent(p.file)}" alt="${p.name}" loading="lazy"/>
+          </div>
+          <div class="product-info">
+            <div class="product-name">${p.name}</div>
+            <div class="product-desc">${p.desc}</div>
+            <div class="price-block">
+              <span class="price-unit">${PRICE_UNIT},00 € <span>/ unidad</span></span>
+              <span class="price-offer">🔥 ${OFFER_QTY}×${PRICE_OFFER} € — Oferta</span>
+            </div>
+          </div>
+          <button class="btn-buy" onclick="addToCart(${p.id},this)">🛒 Añadir</button>
+        </div>
+      `).join('');
+    }
+
+    function goToShop(){
+      document.getElementById('page-home').classList.add('hidden');
+      const s = document.getElementById('page-shop');
+      s.classList.add('visible');
+      requestAnimationFrame(()=>requestAnimationFrame(()=>s.classList.add('animated')));
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+    function goToHome(){
+      const s = document.getElementById('page-shop');
+      s.classList.remove('animated');
+      setTimeout(()=>s.classList.remove('visible'),500);
+      document.getElementById('page-home').classList.remove('hidden');
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+
+    // Fondo estrellas
+    const starsEl = document.getElementById('stars');
+    for(let i=0;i<60;i++){
+      const s=document.createElement('div'); s.className='star';
+      s.style.cssText=`left:${Math.random()*100}%;top:${Math.random()*100}%;--dur:${2+Math.random()*4}s;--delay:${Math.random()*5}s;width:${3+Math.random()*5}px;height:${3+Math.random()*5}px`;
+      starsEl.appendChild(s);
+    }
+    const emojis=['🍃','🌸','✨','🌟','🍄','🦋','🌼'];
+    const pel=document.getElementById('particles');
+    for(let i=0;i<12;i++){
+      const p=document.createElement('div'); p.className='magic-particle';
+      p.textContent=emojis[Math.floor(Math.random()*emojis.length)];
+      p.style.cssText=`left:${Math.random()*100}%;--dur:${6+Math.random()*8}s;--delay:${Math.random()*10}s`;
+      pel.appendChild(p);
+    }
+
+    renderFilters();
+    renderProducts();
+  </script>
+</body>
+</html>
