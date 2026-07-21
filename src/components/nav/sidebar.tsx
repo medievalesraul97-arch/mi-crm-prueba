@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
+import { useAppData } from "@/components/providers/app-data-provider";
 import { cn } from "@/lib/utils";
 import type { Usuario } from "@/lib/types";
 import { esActiva, type NavItem } from "./nav-items";
@@ -21,6 +22,13 @@ const ROL_LABEL: Record<Usuario["rol"], string> = {
 /** Barra lateral de escritorio (>=768px), 240px, en columna. */
 export function Sidebar({ items, user }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useAppData();
+
+  function cerrarSesion() {
+    logout();
+    router.replace("/login");
+  }
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface md:flex">
@@ -72,6 +80,7 @@ export function Sidebar({ items, user }: SidebarProps) {
           </Link>
           <button
             type="button"
+            onClick={cerrarSesion}
             aria-label="Cerrar sesión"
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2"
           >

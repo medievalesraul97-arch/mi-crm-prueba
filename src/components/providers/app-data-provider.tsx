@@ -14,12 +14,7 @@ import type {
   SeguimientoEnriquecido,
   Usuario,
 } from "@/lib/types";
-import {
-  CLIENTES,
-  SEGUIMIENTOS_SEMILLA,
-  USUARIOS,
-  USUARIO_ACTUAL_ID,
-} from "@/lib/mock/data";
+import { CLIENTES, SEGUIMIENTOS_SEMILLA, USUARIOS } from "@/lib/mock/data";
 import { addDays, bucket, startOfDay } from "@/lib/date";
 
 export interface CrearSeguimientoInput {
@@ -38,19 +33,27 @@ export type CrearSeguimientoResultado =
   | { ok: true }
   | { ok: false; errors: ErroresSeguimiento };
 
+export type LoginResultado = { ok: true } | { ok: false; error: string };
+
 interface AppData {
   /** `true` hasta que el cliente resuelve `today` + fechas (evita mismatch SSR). */
   loading: boolean;
+  /** `true` cuando ya se leyó la sesión de localStorage (para el gate de auth). */
+  authLoaded: boolean;
   today: Date | null;
   clientes: Cliente[];
   usuarios: Usuario[];
-  currentUser: Usuario;
+  /** Usuario con sesión iniciada, o `null` si no hay sesión (login mock). */
+  currentUser: Usuario | null;
   atrasados: SeguimientoEnriquecido[];
   paraHoy: SeguimientoEnriquecido[];
   pendientesCount: number;
   marcarHecho: (id: string) => void;
   deshacer: (id: string) => void;
   crearSeguimiento: (input: CrearSeguimientoInput) => CrearSeguimientoResultado;
+  /** Login mock: valida por email (cualquier contraseña no vacía). */
+  login: (email: string, password: string) => LoginResultado;
+  logout: () => void;
   setCurrentUser: (id: string) => void;
 }
 
@@ -62,29 +65,32 @@ export function useAppData(): AppData {
   return ctx;
 }
 
+const SESSION_KEY = "vibecrm_session";
+
 let seq = 0;
 function nuevoId(): string {
   seq += 1;
   return `s-nuevo-${Date.now()}-${seq}`;
 }
 
-interface EstadoMock {
+interface EstadoApp {
   today: Date | null;
   seguimientos: Seguimiento[];
+  sessionUserId: string | null;
+  authLoaded: boolean;
 }
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const [{ today, seguimientos }, setEstado] = useState<EstadoMock>({
+  const [state, setState] = useState<EstadoApp>({
     today: null,
     seguimientos: [],
+    sessionUserId: null,
+    authLoaded: false,
   });
-  const [currentUserId, setCurrentUserId] = useState<string>(USUARIO_ACTUAL_ID);
+  const { today, seguimientos, sessionUserId, authLoaded } = state;
 
-  // Resolver `today` + fechas SOLO en cliente tras montar. El estado inicial es
-  // "loading" (today === null) y las pantallas lo leen explícitamente en vez de
-  // inferir la carga por listas vacías. Este setState en el efecto es
-  // intencionado: derivar de la hora local del cliente en el mount es lo que
-  // evita el mismatch SSR/hidratación (no hay alternativa sin efecto).
+  // Al montar (solo cliente): resolver fechas + leer la sesión de localStorage.
+  // Se hace tras montar para evitar el mismatch SSR/hidratación.
   useEffect(() => {
     const hoy = startOfDay(new Date());
     const resueltos: Seguimiento[] = SEGUIMIENTOS_SEMILLA.map((s) => ({
@@ -96,8 +102,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       fechaHecho: s.hecho ? hoy : undefined,
       responsableId: s.responsableId,
     }));
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(SESSION_KEY);
+    } catch {
+      stored = null;
+    }
+    if (stored && !USUARIOS.some((u) => u.id === stored)) stored = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEstado({ today: hoy, seguimientos: resueltos });
+    setState({
+      today: hoy,
+      seguimientos: resueltos,
+      sessionUserId: stored,
+      authLoaded: true,
+    });
   }, []);
 
   const loading = today === null;
@@ -110,7 +128,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     () => new Map(USUARIOS.map((u) => [u.id, u])),
     [],
   );
-  const currentUser = usuarioPorId.get(currentUserId) ?? USUARIOS[0];
+  const currentUser = sessionUserId
+    ? usuarioPorId.get(sessionUserId) ?? null
+    : null;
 
   const { atrasados, paraHoy } = useMemo(() => {
     const vacio = {
@@ -139,21 +159,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const pendientesCount = atrasados.length + paraHoy.length;
 
   function marcarHecho(id: string) {
-    setEstado((prev) => ({
-      ...prev,
-      seguimientos: prev.seguimientos.map((s) =>
-        s.id === id
-          ? { ...s, hecho: true, fechaHecho: prev.today ?? startOfDay(new Date()) }
-          : s,
+    setState((s) => ({
+      ...s,
+      seguimientos: s.seguimientos.map((x) =>
+        x.id === id
+          ? { ...x, hecho: true, fechaHecho: s.today ?? startOfDay(new Date()) }
+          : x,
       ),
     }));
   }
 
   function deshacer(id: string) {
-    setEstado((prev) => ({
-      ...prev,
-      seguimientos: prev.seguimientos.map((s) =>
-        s.id === id ? { ...s, hecho: false, fechaHecho: undefined } : s,
+    setState((s) => ({
+      ...s,
+      seguimientos: s.seguimientos.map((x) =>
+        x.id === id ? { ...x, hecho: false, fechaHecho: undefined } : x,
       ),
     }));
   }
@@ -176,14 +196,46 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       vence: startOfDay(input.vence!),
       hecho: false,
       fechaHecho: undefined,
-      responsableId: currentUser.id,
+      responsableId: currentUser?.id ?? USUARIOS[0].id,
     };
-    setEstado((prev) => ({ ...prev, seguimientos: [...prev.seguimientos, nuevo] }));
+    setState((s) => ({ ...s, seguimientos: [...s.seguimientos, nuevo] }));
     return { ok: true };
+  }
+
+  function persistSession(id: string | null) {
+    try {
+      if (id) localStorage.setItem(SESSION_KEY, id);
+      else localStorage.removeItem(SESSION_KEY);
+    } catch {
+      // localStorage no disponible: la sesión no persiste, pero no rompe.
+    }
+  }
+
+  function login(email: string, password: string): LoginResultado {
+    const user = USUARIOS.find(
+      (u) => u.email.toLowerCase() === email.trim().toLowerCase(),
+    );
+    if (!user || !password.trim()) {
+      return { ok: false, error: "Email o contraseña incorrectos" };
+    }
+    setState((s) => ({ ...s, sessionUserId: user.id }));
+    persistSession(user.id);
+    return { ok: true };
+  }
+
+  function logout() {
+    setState((s) => ({ ...s, sessionUserId: null }));
+    persistSession(null);
+  }
+
+  function setCurrentUser(id: string) {
+    setState((s) => ({ ...s, sessionUserId: id }));
+    persistSession(id);
   }
 
   const value: AppData = {
     loading,
+    authLoaded,
     today,
     clientes: CLIENTES,
     usuarios: USUARIOS,
@@ -194,7 +246,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     marcarHecho,
     deshacer,
     crearSeguimiento,
-    setCurrentUser: setCurrentUserId,
+    login,
+    logout,
+    setCurrentUser,
   };
 
   return (

@@ -1,8 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAppData } from "@/components/providers/app-data-provider";
 import type { Usuario } from "@/lib/types";
@@ -12,11 +15,18 @@ const ROL_LABEL: Record<Usuario["rol"], string> = {
   comercial: "Atiende y vende",
 };
 
-// Placeholder de Perfil (RAU-112). Aloja además el conmutador de usuario, que
-// es SOLO una ayuda de demo para probar el gating de Equipo por rol (el login
-// real es RAU-87).
+// Placeholder de Perfil (RAU-112) + cierre de sesión + conmutador de usuario
+// (ayuda de demo para probar el gating por rol; el login real es RAU-87).
 export default function CuentaPage() {
-  const { currentUser, usuarios, setCurrentUser } = useAppData();
+  const { currentUser, usuarios, setCurrentUser, logout } = useAppData();
+  const router = useRouter();
+
+  if (!currentUser) return null;
+
+  function cerrarSesion() {
+    logout();
+    router.replace("/login");
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,6 +87,15 @@ export default function CuentaPage() {
           })}
         </div>
       </Card>
+
+      <Button
+        variant="secondary"
+        onClick={cerrarSesion}
+        className="w-full justify-center gap-2"
+      >
+        <LogOut className="h-4 w-4" strokeWidth={1.5} />
+        Cerrar sesión
+      </Button>
     </div>
   );
 }

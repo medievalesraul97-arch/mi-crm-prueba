@@ -10,6 +10,8 @@ import { useAppData } from "@/components/providers/app-data-provider";
 export default function EquipoPage() {
   const { currentUser } = useAppData();
 
+  if (!currentUser) return null;
+
   if (currentUser.rol !== "propietaria") {
     return (
       <EmptyState

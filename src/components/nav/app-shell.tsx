@@ -11,8 +11,7 @@ import { NAV_ITEMS } from "./nav-items";
 /**
  * Shell de navegación: sidebar en escritorio, tab bar en móvil y cabecera móvil
  * con acceso a Perfil. Filtra las pestañas por rol (Equipo solo `propietaria`).
- * En este alcance la barra se mantiene en todas las rutas; ocultarla en la ficha
- * de cliente queda para RAU-68.
+ * Solo se renderiza dentro del AuthGate, así que hay sesión.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { currentUser } = useAppData();
@@ -20,10 +19,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const items = useMemo(
     () =>
       NAV_ITEMS.filter(
-        (item) => !item.ownerOnly || currentUser.rol === "propietaria",
+        (item) => !item.ownerOnly || currentUser?.rol === "propietaria",
       ),
-    [currentUser.rol],
+    [currentUser?.rol],
   );
+
+  // Guarda defensiva de tipado (el AuthGate ya garantiza la sesión).
+  if (!currentUser) return null;
 
   return (
     <div className="flex min-h-dvh">
