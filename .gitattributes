@@ -1,0 +1,3 @@
+# Normaliza los finales de línea a LF en el repo (evita problemas CRLF en el
+# build de Railway/Linux). En checkout se usan los nativos de cada plataforma.
+* text=auto

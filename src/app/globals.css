@@ -1,0 +1,195 @@
+@import "tailwindcss";
+
+/*
+ * Vibe CRM — design tokens
+ * Fuente: diseño/design.md (Vibe CRM Design System)
+ * Los valores "crudos" viven en :root / [data-theme="dark"]; el bloque
+ * @theme inline los expone como tokens de Tailwind (bg-primary, text-muted, etc.)
+ * para que el modo oscuro (atributo data-theme en <html>) siga funcionando en runtime.
+ */
+
+:root {
+  --vibe-color-primary: #16a34a;
+  --vibe-color-primary-hover: #15803d;
+  --vibe-color-primary-active: #166534;
+  --vibe-color-primary-subtle: #f0fdf4;
+  --vibe-color-on-primary: #ffffff;
+
+  --vibe-color-bg: #f7f8f9;
+  --vibe-color-surface: #ffffff;
+  --vibe-color-surface-2: #f1f2f4;
+
+  --vibe-color-border: #e8eaed;
+  --vibe-color-border-strong: #d8dbdf;
+
+  --vibe-color-text: #1a1d21;
+  --vibe-color-text-muted: #656c75;
+  --vibe-color-text-subtle: #868d96;
+
+  --vibe-color-focus: #16a34a;
+
+  --vibe-color-success: #15803d;
+  --vibe-color-success-bg: #ecfdf3;
+  --vibe-color-success-text: #166534;
+
+  --vibe-color-warning: #b45309;
+  --vibe-color-warning-bg: #fffbeb;
+  --vibe-color-warning-text: #92400e;
+
+  --vibe-color-error: #dc2626;
+  --vibe-color-error-bg: #fef2f2;
+  --vibe-color-error-text: #991b1b;
+
+  --vibe-color-info: #2563eb;
+  --vibe-color-info-bg: #eff6ff;
+  --vibe-color-info-text: #1e40af;
+
+  --vibe-shadow-xs: 0 1px 2px rgba(16, 24, 32, 0.04);
+  --vibe-shadow-sm: 0 1px 2px rgba(16, 24, 32, 0.06), 0 1px 3px rgba(16, 24, 32, 0.05);
+  --vibe-shadow-md: 0 2px 4px rgba(16, 24, 32, 0.05), 0 4px 12px rgba(16, 24, 32, 0.06);
+  --vibe-shadow-lg: 0 8px 24px rgba(16, 24, 32, 0.1);
+}
+
+[data-theme="dark"] {
+  --vibe-color-primary: #22c55e;
+  --vibe-color-primary-hover: #4ade80;
+  --vibe-color-primary-active: #86efac;
+  --vibe-color-primary-subtle: rgba(34, 197, 94, 0.14);
+  --vibe-color-on-primary: #052e16;
+
+  --vibe-color-bg: #0e0f11;
+  --vibe-color-surface: #16181b;
+  --vibe-color-surface-2: #1c1f23;
+
+  --vibe-color-border: #2a2e33;
+  --vibe-color-border-strong: #3a3f45;
+
+  --vibe-color-text: #ececed;
+  --vibe-color-text-muted: #9ba1a8;
+  --vibe-color-text-subtle: #71777e;
+
+  --vibe-color-focus: #4ade80;
+
+  --vibe-color-success: #4ade80;
+  --vibe-color-success-bg: rgba(34, 197, 94, 0.14);
+  --vibe-color-success-text: #86efac;
+
+  --vibe-color-warning: #fbbf24;
+  --vibe-color-warning-bg: rgba(217, 119, 6, 0.16);
+  --vibe-color-warning-text: #fcd34d;
+
+  --vibe-color-error: #f87171;
+  --vibe-color-error-bg: rgba(220, 38, 38, 0.16);
+  --vibe-color-error-text: #fca5a5;
+
+  --vibe-color-info: #60a5fa;
+  --vibe-color-info-bg: rgba(37, 99, 235, 0.18);
+  --vibe-color-info-text: #93c5fd;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+
+  --color-primary: var(--vibe-color-primary);
+  --color-primary-hover: var(--vibe-color-primary-hover);
+  --color-primary-active: var(--vibe-color-primary-active);
+  --color-primary-subtle: var(--vibe-color-primary-subtle);
+  --color-on-primary: var(--vibe-color-on-primary);
+
+  --color-bg: var(--vibe-color-bg);
+  --color-surface: var(--vibe-color-surface);
+  --color-surface-2: var(--vibe-color-surface-2);
+
+  --color-border: var(--vibe-color-border);
+  --color-border-strong: var(--vibe-color-border-strong);
+
+  --color-text: var(--vibe-color-text);
+  --color-text-muted: var(--vibe-color-text-muted);
+  --color-text-subtle: var(--vibe-color-text-subtle);
+
+  --color-focus: var(--vibe-color-focus);
+
+  --color-success: var(--vibe-color-success);
+  --color-success-bg: var(--vibe-color-success-bg);
+  --color-success-text: var(--vibe-color-success-text);
+
+  --color-warning: var(--vibe-color-warning);
+  --color-warning-bg: var(--vibe-color-warning-bg);
+  --color-warning-text: var(--vibe-color-warning-text);
+
+  --color-error: var(--vibe-color-error);
+  --color-error-bg: var(--vibe-color-error-bg);
+  --color-error-text: var(--vibe-color-error-text);
+
+  --color-info: var(--vibe-color-info);
+  --color-info-bg: var(--vibe-color-info-bg);
+  --color-info-text: var(--vibe-color-info-text);
+
+  --shadow-xs: var(--vibe-shadow-xs);
+  --shadow-sm: var(--vibe-shadow-sm);
+  --shadow-md: var(--vibe-shadow-md);
+  --shadow-lg: var(--vibe-shadow-lg);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 16px;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: -0.011em;
+    font-size: 16px;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.011em;
+    line-height: 1.2;
+  }
+
+  /* Anillo de foco verde (2px) con separación, según design.md §5 */
+  :focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--color-surface),
+      0 0 0 4px var(--color-focus);
+    border-radius: var(--radius-md);
+  }
+}
+
+@keyframes vibe-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes vibe-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-vibe-pulse {
+  animation: vibe-pulse 1.4s ease-in-out infinite;
+}
+
+.animate-vibe-spin {
+  animation: vibe-spin 0.7s linear infinite;
+}
