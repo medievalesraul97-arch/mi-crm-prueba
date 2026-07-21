@@ -1,13 +1,6 @@
-import { Users } from "lucide-react";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ClientesClient } from "@/components/clientes/clientes-client";
 
-// Placeholder hasta implementar la lista de clientes (RAU-65).
+// Server Component fino: la lógica interactiva vive en ClientesClient ("use client").
 export default function ClientesPage() {
-  return (
-    <EmptyState
-      icon={Users}
-      title="Clientes"
-      description="Esta pantalla se implementa en RAU-65."
-    />
-  );
+  return <ClientesClient />;
 }

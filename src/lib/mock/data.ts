@@ -1,4 +1,4 @@
-import type { Cliente, Usuario } from "@/lib/types";
+import type { EstadoCliente, Usuario } from "@/lib/types";
 
 /**
  * Datos de ejemplo (mock en memoria) para el primer desarrollo UI-first.
@@ -23,13 +23,28 @@ export const USUARIOS: Usuario[] = [
 /** Usuario con sesión iniciada por defecto (mock; el login real es RAU-87). */
 export const USUARIO_ACTUAL_ID = "u-marta";
 
-export const CLIENTES: Cliente[] = [
-  { id: "c-1", nombre: "Laura Sánchez", empresa: "Estudio Nórdico", estado: "negociacion" },
-  { id: "c-2", nombre: "Diego Fernández", empresa: "Cafés del Sur", estado: "nuevo" },
-  { id: "c-3", nombre: "Ana Torres", empresa: "Torres & Co", estado: "ganado" },
-  { id: "c-4", nombre: "Javier Molina", estado: "negociacion" },
-  { id: "c-5", nombre: "Marina López", empresa: "Diseño Aurora", estado: "nuevo" },
-  { id: "c-6", nombre: "Pablo Herrero", empresa: "Herrero Legal", estado: "perdido" },
+/**
+ * Semilla de clientes. `ultimoContactoOffset` es días atrás (≥0) respecto a HOY;
+ * el provider lo resuelve a una fecha real tras montar (igual que los
+ * seguimientos), para no calcular fechas a nivel de módulo (mismatch SSR).
+ */
+export interface ClienteSemilla {
+  id: string;
+  nombre: string;
+  empresa?: string;
+  estado: EstadoCliente;
+  telefono: string;
+  email: string;
+  ultimoContactoOffset: number;
+}
+
+export const CLIENTES_SEMILLA: ClienteSemilla[] = [
+  { id: "c-1", nombre: "Laura Sánchez", empresa: "Estudio Nórdico", estado: "negociacion", telefono: "+34 600 123 456", email: "laura@estudionordico.es", ultimoContactoOffset: 0 },
+  { id: "c-2", nombre: "Diego Fernández", empresa: "Cafés del Sur", estado: "nuevo", telefono: "+34 611 222 333", email: "diego@cafesdelsur.com", ultimoContactoOffset: 1 },
+  { id: "c-3", nombre: "Ana Torres", empresa: "Torres & Co", estado: "ganado", telefono: "+34 622 333 444", email: "ana@torresyco.es", ultimoContactoOffset: 3 },
+  { id: "c-4", nombre: "Javier Molina", estado: "negociacion", telefono: "+34 633 444 555", email: "javier.molina@gmail.com", ultimoContactoOffset: 6 },
+  { id: "c-5", nombre: "Marina López", empresa: "Diseño Aurora", estado: "nuevo", telefono: "+34 644 555 666", email: "marina@disenoaurora.es", ultimoContactoOffset: 10 },
+  { id: "c-6", nombre: "Pablo Herrero", empresa: "Herrero Legal", estado: "perdido", telefono: "+34 655 666 777", email: "pablo@herrerolegal.es", ultimoContactoOffset: 25 },
 ];
 
 export const SEGUIMIENTOS_SEMILLA: SeguimientoSemilla[] = [

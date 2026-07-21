@@ -15,7 +15,7 @@ import type {
   SeguimientoEnriquecido,
   Usuario,
 } from "@/lib/types";
-import { CLIENTES, SEGUIMIENTOS_SEMILLA, USUARIOS } from "@/lib/mock/data";
+import { CLIENTES_SEMILLA, SEGUIMIENTOS_SEMILLA, USUARIOS } from "@/lib/mock/data";
 import { addDays, bucket, startOfDay } from "@/lib/date";
 
 export interface CrearSeguimientoInput {
@@ -122,6 +122,19 @@ export function validarCliente(input: CrearClienteInput): ErroresCliente {
   return errors;
 }
 
+/** Resuelve la semilla de clientes a `Cliente[]` con la fecha real de último contacto. */
+function resolverClientes(hoy: Date): Cliente[] {
+  return CLIENTES_SEMILLA.map((c) => ({
+    id: c.id,
+    nombre: c.nombre,
+    empresa: c.empresa,
+    estado: c.estado,
+    telefono: c.telefono,
+    email: c.email,
+    fechaUltimoContacto: addDays(hoy, -c.ultimoContactoOffset),
+  }));
+}
+
 interface EstadoApp {
   today: Date | null;
   clientes: Cliente[];
@@ -133,7 +146,7 @@ interface EstadoApp {
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<EstadoApp>({
     today: null,
-    clientes: CLIENTES,
+    clientes: [],
     seguimientos: [],
     sessionUserId: null,
     authLoaded: false,
@@ -161,13 +174,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
     if (stored && !USUARIOS.some((u) => u.id === stored)) stored = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setState({
+    setState((s) => ({
+      ...s,
       today: hoy,
-      clientes: CLIENTES,
+      // Merge por id: preserva altas hechas antes de resolver la semilla y no
+      // duplica clientes si el efecto se reejecutara.
+      clientes: [
+        ...s.clientes,
+        ...resolverClientes(hoy).filter(
+          (c) => !s.clientes.some((x) => x.id === c.id),
+        ),
+      ],
       seguimientos: resueltos,
       sessionUserId: stored,
       authLoaded: true,
-    });
+    }));
   }, []);
 
   const loading = today === null;

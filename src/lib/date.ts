@@ -37,6 +37,16 @@ export function eyebrowHoy(today: Date): string {
   return fmt.format(today).toUpperCase();
 }
 
+/** Texto relativo del último contacto: Hoy / Ayer / Hace N días / Hace N semanas. */
+export function ultimoContactoTexto(fecha: Date, today: Date): string {
+  const d = diasEntre(fecha, today); // días transcurridos desde `fecha` (>0 = pasado)
+  if (d <= 0) return "Hoy";
+  if (d === 1) return "Ayer";
+  if (d < 7) return `Hace ${d} días`;
+  const w = Math.round(d / 7);
+  return `Hace ${w} ${w === 1 ? "semana" : "semanas"}`;
+}
+
 /** Texto relativo del vencimiento. Vacío si es futuro (no se muestra en Hoy). */
 export function vencidoTexto(vence: Date, today: Date): string {
   const atraso = diasEntre(vence, today); // >0 => venció hace N días
