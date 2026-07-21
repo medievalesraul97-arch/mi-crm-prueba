@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  CanalOrigen,
   Cliente,
   Seguimiento,
   SeguimientoEnriquecido,
@@ -33,6 +34,25 @@ export type CrearSeguimientoResultado =
   | { ok: true }
   | { ok: false; errors: ErroresSeguimiento };
 
+export interface CrearClienteInput {
+  nombre: string;
+  empresa: string;
+  telefono: string;
+  email: string;
+  canalOrigen: CanalOrigen | null;
+  nota: string;
+}
+
+export interface ErroresCliente {
+  nombre?: string;
+  email?: string;
+  contacto?: string;
+}
+
+export type CrearClienteResultado =
+  | { ok: true; cliente: Cliente }
+  | { ok: false; errors: ErroresCliente };
+
 export type LoginResultado = { ok: true } | { ok: false; error: string };
 
 interface AppData {
@@ -51,6 +71,8 @@ interface AppData {
   marcarHecho: (id: string) => void;
   deshacer: (id: string) => void;
   crearSeguimiento: (input: CrearSeguimientoInput) => CrearSeguimientoResultado;
+  /** Alta de cliente (RAU-66). Valida nombre + (teléfono o email) + email válido. */
+  crearCliente: (input: CrearClienteInput) => CrearClienteResultado;
   /** Login mock: valida por email (cualquier contraseña no vacía). */
   login: (email: string, password: string) => LoginResultado;
   logout: () => void;
@@ -67,14 +89,42 @@ export function useAppData(): AppData {
 
 const SESSION_KEY = "vibecrm_session";
 
+const validEmail = (email: string): boolean =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
 let seq = 0;
 function nuevoId(): string {
   seq += 1;
   return `s-nuevo-${Date.now()}-${seq}`;
 }
 
+let seqCliente = 0;
+function nuevoClienteId(): string {
+  seqCliente += 1;
+  return `c-nuevo-${Date.now()}-${seqCliente}`;
+}
+
+/**
+ * Validación pura del alta de cliente (RAU-66), compartida por `crearCliente` y
+ * el formulario (errores en vivo tras el primer intento). Fuente única de verdad
+ * para no divergir. Devuelve `{}` si no hay errores.
+ */
+export function validarCliente(input: CrearClienteInput): ErroresCliente {
+  const nombre = input.nombre.trim();
+  const email = input.email.trim();
+  const telefono = input.telefono.trim();
+
+  const errors: ErroresCliente = {};
+  if (!nombre) errors.nombre = "Añade un nombre";
+  if (email && !validEmail(email)) errors.email = "Email no válido";
+  if (!telefono && !email)
+    errors.contacto = "Indica al menos un teléfono o un email";
+  return errors;
+}
+
 interface EstadoApp {
   today: Date | null;
+  clientes: Cliente[];
   seguimientos: Seguimiento[];
   sessionUserId: string | null;
   authLoaded: boolean;
@@ -83,11 +133,12 @@ interface EstadoApp {
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<EstadoApp>({
     today: null,
+    clientes: CLIENTES,
     seguimientos: [],
     sessionUserId: null,
     authLoaded: false,
   });
-  const { today, seguimientos, sessionUserId, authLoaded } = state;
+  const { today, clientes, seguimientos, sessionUserId, authLoaded } = state;
 
   // Al montar (solo cliente): resolver fechas + leer la sesión de localStorage.
   // Se hace tras montar para evitar el mismatch SSR/hidratación.
@@ -112,6 +163,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setState({
       today: hoy,
+      clientes: CLIENTES,
       seguimientos: resueltos,
       sessionUserId: stored,
       authLoaded: true,
@@ -121,8 +173,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const loading = today === null;
 
   const clientePorId = useMemo(
-    () => new Map(CLIENTES.map((c) => [c.id, c])),
-    [],
+    () => new Map(clientes.map((c) => [c.id, c])),
+    [clientes],
   );
   const usuarioPorId = useMemo(
     () => new Map(USUARIOS.map((u) => [u.id, u])),
@@ -202,6 +254,34 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }
 
+  function crearCliente(input: CrearClienteInput): CrearClienteResultado {
+    const errors = validarCliente(input);
+    if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+    const nombre = input.nombre.trim();
+    const email = input.email.trim();
+    const telefono = input.telefono.trim();
+    const hoy = today ?? startOfDay(new Date());
+    const empresa = input.empresa.trim();
+    const nota = input.nota.trim();
+    // El objeto que se devuelve es el MISMO que se inserta en el estado (id y
+    // fechas se calculan una sola vez), para evitar divergencias sutiles.
+    const nuevo: Cliente = {
+      id: nuevoClienteId(),
+      nombre,
+      empresa: empresa || undefined,
+      estado: "nuevo",
+      telefono: telefono || undefined,
+      email: email || undefined,
+      canalOrigen: input.canalOrigen ?? undefined,
+      nota: nota || undefined,
+      fechaRegistro: hoy,
+      fechaUltimoContacto: hoy,
+    };
+    setState((s) => ({ ...s, clientes: [nuevo, ...s.clientes] }));
+    return { ok: true, cliente: nuevo };
+  }
+
   function persistSession(id: string | null) {
     try {
       if (id) localStorage.setItem(SESSION_KEY, id);
@@ -237,7 +317,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     loading,
     authLoaded,
     today,
-    clientes: CLIENTES,
+    clientes,
     usuarios: USUARIOS,
     currentUser,
     atrasados,
@@ -246,6 +326,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     marcarHecho,
     deshacer,
     crearSeguimiento,
+    crearCliente,
     login,
     logout,
     setCurrentUser,

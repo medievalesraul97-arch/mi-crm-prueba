@@ -9,11 +9,19 @@ export interface Usuario {
 
 export type EstadoCliente = "nuevo" | "negociacion" | "ganado" | "perdido";
 
+export type CanalOrigen = "web" | "redes" | "email" | "whatsapp";
+
 export interface Cliente {
   id: string;
   nombre: string;
   empresa?: string;
   estado: EstadoCliente;
+  telefono?: string;
+  email?: string;
+  canalOrigen?: CanalOrigen;
+  nota?: string;
+  fechaRegistro?: Date;
+  fechaUltimoContacto?: Date;
 }
 
 export interface Seguimiento {

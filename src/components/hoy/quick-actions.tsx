@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
 import { NuevaTareaForm } from "./nueva-tarea-form";
+import { NuevoClienteForm } from "./nuevo-cliente-form";
 import { cn } from "@/lib/utils";
 
 export type Accion = "tarea" | "interaccion" | "venta" | "cliente";
@@ -83,6 +84,8 @@ export function AccionOverlay({
     >
       {abierta === "tarea" ? (
         <NuevaTareaForm onDone={onClose} />
+      ) : abierta === "cliente" ? (
+        <NuevoClienteForm onDone={onClose} />
       ) : (
         <p className="py-2 text-sm text-text-muted">
           Este formulario se implementa en {rau}. Abrirá el overlay con selector
