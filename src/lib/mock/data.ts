@@ -1,4 +1,4 @@
-import type { EstadoCliente, Usuario } from "@/lib/types";
+import type { CanalInteraccion, EstadoCliente, Usuario } from "@/lib/types";
 
 /**
  * Datos de ejemplo (mock en memoria) para el primer desarrollo UI-first.
@@ -55,4 +55,25 @@ export const SEGUIMIENTOS_SEMILLA: SeguimientoSemilla[] = [
   { id: "s-5", clienteId: "c-5", accion: "Responder dudas sobre el plan", venceOffset: 0, responsableId: "u-carlos" },
   { id: "s-6", clienteId: "c-6", accion: "Seguimiento tras la reunión", venceOffset: 3, responsableId: "u-carlos" },
   { id: "s-7", clienteId: "c-1", accion: "Agradecer la última compra", venceOffset: -5, hecho: true, responsableId: "u-marta" },
+];
+
+/**
+ * Semilla de interacciones (RAU-116). `fechaOffset` es días atrás (≥0) respecto a
+ * HOY; el provider lo resuelve a fecha real tras montar (igual que seguimientos).
+ * OJO consistencia: la interacción más reciente de `c-1` va en offset 0, que
+ * coincide con su `ultimoContactoOffset` (Laura, offset 0), para que la ficha y la
+ * lista de clientes no se contradigan en "último contacto".
+ */
+export interface InteraccionSemilla {
+  id: string;
+  clienteId: string;
+  canal: CanalInteraccion;
+  texto: string;
+  fechaOffset: number;
+  autorId: string;
+}
+
+export const INTERACCIONES_SEMILLA: InteraccionSemilla[] = [
+  { id: "i-1", clienteId: "c-1", canal: "llamada", texto: "Llamada para repasar la propuesta; le encaja el presupuesto, pide un par de ajustes.", fechaOffset: 0, autorId: "u-marta" },
+  { id: "i-2", clienteId: "c-1", canal: "email", texto: "Enviado el catálogo actualizado por email tras la feria.", fechaOffset: 5, autorId: "u-carlos" },
 ];

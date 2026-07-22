@@ -10,6 +10,7 @@ import {
 import { Sheet } from "@/components/ui/sheet";
 import { NuevaTareaForm } from "./nueva-tarea-form";
 import { NuevoClienteForm } from "./nuevo-cliente-form";
+import { RegistrarInteraccionForm } from "./registrar-interaccion-form";
 import { cn } from "@/lib/utils";
 
 export type Accion = "tarea" | "interaccion" | "venta" | "cliente";
@@ -24,7 +25,7 @@ interface Tile {
 
 const TILES: Tile[] = [
   { key: "tarea", label: "Nueva tarea", icon: ClipboardList, destacada: true },
-  { key: "interaccion", label: "Anotar interacción", icon: MessageSquare, rau: "RAU-116" },
+  { key: "interaccion", label: "Anotar interacción", icon: MessageSquare },
   { key: "venta", label: "Registrar venta", icon: TrendingUp, rau: "RAU-69" },
   { key: "cliente", label: "Nuevo cliente", icon: UserPlus, rau: "RAU-66" },
 ];
@@ -67,7 +68,10 @@ export function QuickActions({ onOpen }: { onOpen: (accion: Accion) => void }) {
   );
 }
 
-/** Overlay de la acción abierta: Nueva tarea funcional; el resto, stub etiquetado. */
+/**
+ * Overlay de la acción abierta. Nueva tarea, Nuevo cliente y Registrar interacción
+ * son funcionales; Registrar venta sigue como stub etiquetado (RAU-69).
+ */
 export function AccionOverlay({
   abierta,
   onClose,
@@ -86,6 +90,8 @@ export function AccionOverlay({
         <NuevaTareaForm onDone={onClose} />
       ) : abierta === "cliente" ? (
         <NuevoClienteForm onDone={onClose} />
+      ) : abierta === "interaccion" ? (
+        <RegistrarInteraccionForm onDone={onClose} />
       ) : (
         <p className="py-2 text-sm text-text-muted">
           Este formulario se implementa en {rau}. Abrirá el overlay con selector

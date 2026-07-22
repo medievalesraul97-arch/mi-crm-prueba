@@ -39,3 +39,24 @@ export interface SeguimientoEnriquecido extends Seguimiento {
   cliente: Cliente;
   responsable: Usuario;
 }
+
+/**
+ * Canal por el que se registró una interacción (RAU-116). Conjunto DISTINTO de
+ * `CanalOrigen`: aquí es cómo se contactó ("en persona" incluido), no de dónde
+ * vino el cliente.
+ */
+export type CanalInteraccion = "llamada" | "email" | "whatsapp" | "en_persona";
+
+export interface Interaccion {
+  id: string;
+  clienteId: string;
+  canal: CanalInteraccion;
+  texto: string;
+  fecha: Date;
+  autorId: string;
+}
+
+/** Interacción con el autor ya resuelto, para pintar el historial. */
+export interface InteraccionEnriquecida extends Interaccion {
+  autor: Usuario;
+}

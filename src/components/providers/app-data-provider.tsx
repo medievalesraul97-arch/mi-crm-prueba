@@ -9,13 +9,21 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  CanalInteraccion,
   CanalOrigen,
   Cliente,
+  Interaccion,
+  InteraccionEnriquecida,
   Seguimiento,
   SeguimientoEnriquecido,
   Usuario,
 } from "@/lib/types";
-import { CLIENTES_SEMILLA, SEGUIMIENTOS_SEMILLA, USUARIOS } from "@/lib/mock/data";
+import {
+  CLIENTES_SEMILLA,
+  INTERACCIONES_SEMILLA,
+  SEGUIMIENTOS_SEMILLA,
+  USUARIOS,
+} from "@/lib/mock/data";
 import { addDays, bucket, startOfDay } from "@/lib/date";
 
 export interface CrearSeguimientoInput {
@@ -53,6 +61,24 @@ export type CrearClienteResultado =
   | { ok: true; cliente: Cliente }
   | { ok: false; errors: ErroresCliente };
 
+export interface RegistrarInteraccionInput {
+  clienteId: string;
+  canal: CanalInteraccion;
+  texto: string;
+  fecha: Date | null;
+}
+
+export interface ErroresInteraccion {
+  clienteId?: string;
+  canal?: string;
+  texto?: string;
+  fecha?: string;
+}
+
+export type RegistrarInteraccionResultado =
+  | { ok: true }
+  | { ok: false; errors: ErroresInteraccion };
+
 export type LoginResultado = { ok: true } | { ok: false; error: string };
 
 interface AppData {
@@ -82,6 +108,14 @@ interface AppData {
   crearSeguimiento: (input: CrearSeguimientoInput) => CrearSeguimientoResultado;
   /** Alta de cliente (RAU-66). Valida nombre + (teléfono o email) + email válido. */
   crearCliente: (input: CrearClienteInput) => CrearClienteResultado;
+  /** Interacciones registradas (RAU-116), en memoria. */
+  interacciones: Interaccion[];
+  /** Interacciones de un cliente para su ficha: enriquecidas y desc por fecha. */
+  interaccionesDeCliente: (clienteId: string) => InteraccionEnriquecida[];
+  /** Registra una interacción (RAU-116) y avanza `fechaUltimoContacto` del cliente. */
+  registrarInteraccion: (
+    input: RegistrarInteraccionInput,
+  ) => RegistrarInteraccionResultado;
   /** Login mock: valida por email (cualquier contraseña no vacía). */
   login: (email: string, password: string) => LoginResultado;
   logout: () => void;
@@ -113,6 +147,20 @@ function nuevoClienteId(): string {
   return `c-nuevo-${Date.now()}-${seqCliente}`;
 }
 
+let seqInteraccion = 0;
+function nuevoInteraccionId(): string {
+  seqInteraccion += 1;
+  return `i-nuevo-${Date.now()}-${seqInteraccion}`;
+}
+
+/** Canales de interacción válidos, para validar defensivamente en el provider. */
+const CANALES_INTERACCION: readonly CanalInteraccion[] = [
+  "llamada",
+  "email",
+  "whatsapp",
+  "en_persona",
+];
+
 /**
  * Validación pura del alta de cliente (RAU-66), compartida por `crearCliente` y
  * el formulario (errores en vivo tras el primer intento). Fuente única de verdad
@@ -128,6 +176,27 @@ export function validarCliente(input: CrearClienteInput): ErroresCliente {
   if (email && !validEmail(email)) errors.email = "Email no válido";
   if (!telefono && !email)
     errors.contacto = "Indica al menos un teléfono o un email";
+  return errors;
+}
+
+/**
+ * Validación pura del registro de interacción (RAU-116), compartida por
+ * `registrarInteraccion` y el formulario (errores en vivo tras el primer intento).
+ * Fuente única de verdad. Recibe `hoy` (inicio de día) para el chequeo de fecha
+ * futura. No comprueba la existencia del cliente (eso lo hace la mutación, que sí
+ * tiene el mapa de clientes). Devuelve `{}` si no hay errores.
+ */
+export function validarInteraccion(
+  input: RegistrarInteraccionInput,
+  hoy: Date,
+): ErroresInteraccion {
+  const errors: ErroresInteraccion = {};
+  if (!input.clienteId) errors.clienteId = "Elige un cliente";
+  if (!CANALES_INTERACCION.includes(input.canal)) errors.canal = "Elige un canal";
+  if (!input.texto.trim()) errors.texto = "Escribe qué pasó";
+  if (!input.fecha) errors.fecha = "Indica una fecha";
+  else if (startOfDay(input.fecha) > hoy)
+    errors.fecha = "La fecha no puede ser futura";
   return errors;
 }
 
@@ -148,6 +217,7 @@ interface EstadoApp {
   today: Date | null;
   clientes: Cliente[];
   seguimientos: Seguimiento[];
+  interacciones: Interaccion[];
   sessionUserId: string | null;
   authLoaded: boolean;
 }
@@ -157,10 +227,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     today: null,
     clientes: [],
     seguimientos: [],
+    interacciones: [],
     sessionUserId: null,
     authLoaded: false,
   });
-  const { today, clientes, seguimientos, sessionUserId, authLoaded } = state;
+  const { today, clientes, seguimientos, interacciones, sessionUserId, authLoaded } =
+    state;
 
   // Al montar (solo cliente): resolver fechas + leer la sesión de localStorage.
   // Se hace tras montar para evitar el mismatch SSR/hidratación.
@@ -174,6 +246,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       hecho: s.hecho ?? false,
       fechaHecho: s.hecho ? hoy : undefined,
       responsableId: s.responsableId,
+    }));
+    const interaccionesResueltas: Interaccion[] = INTERACCIONES_SEMILLA.map((i) => ({
+      id: i.id,
+      clienteId: i.clienteId,
+      canal: i.canal,
+      texto: i.texto,
+      fecha: addDays(hoy, -i.fechaOffset),
+      autorId: i.autorId,
     }));
     let stored: string | null = null;
     try {
@@ -195,6 +275,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ),
       ],
       seguimientos: resueltos,
+      interacciones: interaccionesResueltas,
       sessionUserId: stored,
       authLoaded: true,
     }));
@@ -343,6 +424,57 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return { ok: true, cliente: nuevo };
   }
 
+  function interaccionesDeCliente(clienteId: string): InteraccionEnriquecida[] {
+    // Lookup seguro del autor (descarta interacciones huérfanas), como
+    // `seguimientosDeCliente`. Orden desc por fecha (más reciente primero).
+    const enriquecer = (i: Interaccion): InteraccionEnriquecida | null => {
+      const autor = usuarioPorId.get(i.autorId);
+      return autor ? { ...i, autor } : null;
+    };
+    const noNulo = (
+      i: InteraccionEnriquecida | null,
+    ): i is InteraccionEnriquecida => i !== null;
+    return interacciones
+      .filter((i) => i.clienteId === clienteId)
+      .sort((a, b) => b.fecha.getTime() - a.fecha.getTime())
+      .map(enriquecer)
+      .filter(noNulo);
+  }
+
+  function registrarInteraccion(
+    input: RegistrarInteraccionInput,
+  ): RegistrarInteraccionResultado {
+    const hoy = today ?? startOfDay(new Date());
+    const errors = validarInteraccion(input, hoy);
+    // Existencia del cliente: el validador puro no conoce el mapa de clientes.
+    if (!errors.clienteId && !clientePorId.has(input.clienteId))
+      errors.clienteId = "Ese cliente no existe";
+    if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+    const fecha = startOfDay(input.fecha!);
+    const nueva: Interaccion = {
+      id: nuevoInteraccionId(),
+      clienteId: input.clienteId,
+      canal: input.canal,
+      texto: input.texto.trim(),
+      fecha,
+      autorId: currentUser?.id ?? USUARIOS[0].id,
+    };
+    // setState atómico: añade la interacción y, en la misma actualización, avanza
+    // `fechaUltimoContacto` si no había fecha previa o la nueva es igual/posterior.
+    setState((s) => ({
+      ...s,
+      interacciones: [nueva, ...s.interacciones],
+      clientes: s.clientes.map((c) =>
+        c.id === input.clienteId &&
+        (!c.fechaUltimoContacto || fecha >= c.fechaUltimoContacto)
+          ? { ...c, fechaUltimoContacto: fecha }
+          : c,
+      ),
+    }));
+    return { ok: true };
+  }
+
   function persistSession(id: string | null) {
     try {
       if (id) localStorage.setItem(SESSION_KEY, id);
@@ -389,6 +521,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     deshacer,
     crearSeguimiento,
     crearCliente,
+    interacciones,
+    interaccionesDeCliente,
+    registrarInteraccion,
     login,
     logout,
     setCurrentUser,

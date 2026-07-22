@@ -75,3 +75,27 @@ export function fechaCorta(fecha: Date): string {
     month: "short",
   }).format(fecha);
 }
+
+/** Fecha a `YYYY-MM-DD` local, para el `value` de un `<input type="date">`. */
+export function isoDeFecha(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/** Parsea `YYYY-MM-DD` (de un `<input type="date">`) a `Date` local, o `null`. */
+export function parseFecha(v: string): Date | null {
+  if (!v) return null;
+  const [y, m, d] = v.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const fecha = new Date(y, m - 1, d);
+  // Rechaza fechas imposibles (p. ej. "2026-02-31", que haría rollover a marzo).
+  // El <input type="date"> nunca las produce, pero endurece el uso programático.
+  if (
+    fecha.getFullYear() !== y ||
+    fecha.getMonth() !== m - 1 ||
+    fecha.getDate() !== d
+  )
+    return null;
+  return fecha;
+}
