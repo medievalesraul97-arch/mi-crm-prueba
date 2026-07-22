@@ -1,13 +1,6 @@
-import { TrendingUp } from "lucide-react";
-import { EmptyState } from "@/components/ui/empty-state";
+import { VentasClient } from "@/components/ventas/ventas-client";
 
-// Placeholder hasta implementar Ventas y oportunidades (RAU-114).
+// Server Component fino: la lógica interactiva vive en VentasClient ("use client").
 export default function VentasPage() {
-  return (
-    <EmptyState
-      icon={TrendingUp}
-      title="Ventas y oportunidades"
-      description="Esta pantalla se implementa en RAU-114."
-    />
-  );
+  return <VentasClient />;
 }
