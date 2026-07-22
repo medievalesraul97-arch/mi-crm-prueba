@@ -24,6 +24,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Sheet } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckRedondo } from "@/components/hoy/check-redondo";
+import { ProgramarSeguimientoForm } from "@/components/hoy/programar-seguimiento-form";
 import { RegistrarInteraccionForm } from "@/components/hoy/registrar-interaccion-form";
 import { ESTADO_CLIENTE_BADGE } from "@/components/ui/estado-badge";
 import { useAppData } from "@/components/providers/app-data-provider";
@@ -94,9 +95,10 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
     deshacer,
   } = useAppData();
   const { showToast } = useToast();
-  // Overlay de "Registrar interacción". Declarado ANTES de los return
-  // condicionales de abajo (react-hooks/rules-of-hooks).
+  // Overlays de acciones rápidas. Declarados ANTES de los return condicionales de
+  // abajo (react-hooks/rules-of-hooks).
   const [interOpen, setInterOpen] = useState(false);
+  const [segOpen, setSegOpen] = useState(false);
 
   // Guard: hasta que el provider resuelve `today` (y siembra los clientes) no se
   // puede usar ningún helper de fecha (today es Date | null).
@@ -217,7 +219,7 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
         <QuickBtn
           icon={CalendarPlus}
           label="Programar seguimiento"
-          onClick={() => proximamente("Programar seguimiento", "RAU-72")}
+          onClick={() => setSegOpen(true)}
         />
         <QuickBtn
           icon={TrendingUp}
@@ -271,6 +273,17 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
         <RegistrarInteraccionForm
           clienteId={cliente.id}
           onDone={() => setInterOpen(false)}
+        />
+      </Sheet>
+
+      <Sheet
+        open={segOpen}
+        onClose={() => setSegOpen(false)}
+        title="Programar seguimiento"
+      >
+        <ProgramarSeguimientoForm
+          clienteId={cliente.id}
+          onDone={() => setSegOpen(false)}
         />
       </Sheet>
     </div>
