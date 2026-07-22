@@ -8,20 +8,8 @@ import {
   type ErroresSeguimiento,
 } from "@/components/providers/app-data-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { isoDeFecha, parseFecha } from "@/lib/date";
 import { cn } from "@/lib/utils";
-
-function isoDeFecha(d: Date): string {
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
-function parseFecha(v: string): Date | null {
-  if (!v) return null;
-  const [y, m, d] = v.split("-").map(Number);
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
-}
 
 /** Formulario mínimo funcional: crea un seguimiento sobre el estado mock. */
 export function NuevaTareaForm({ onDone }: { onDone: () => void }) {

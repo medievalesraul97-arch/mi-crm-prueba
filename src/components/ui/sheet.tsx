@@ -47,9 +47,13 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
           )
         : [];
 
-    // Foco inicial en el primer control (o en el propio panel si no hay).
+    // Foco inicial: preferir un control marcado con [data-autofocus] (si existe y
+    // es visible); si no, el primer focusable (o el propio panel si no hay).
     const iniciales = focusablesEn();
-    (iniciales[0] ?? panel)?.focus();
+    const preferido = panel?.querySelector<HTMLElement>("[data-autofocus]");
+    const objetivo =
+      preferido && preferido.offsetParent !== null ? preferido : iniciales[0];
+    (objetivo ?? panel)?.focus();
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {

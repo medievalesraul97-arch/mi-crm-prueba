@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import {
   ArrowLeft,
   CalendarPlus,
   Check,
   Mail,
+  MessageCircle,
   MessageSquare,
   MessageSquarePlus,
   Pencil,
   Phone,
   TrendingUp,
+  Users,
   UserX,
   type LucideIcon,
 } from "lucide-react";
@@ -18,14 +21,20 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Sheet } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckRedondo } from "@/components/hoy/check-redondo";
+import { RegistrarInteraccionForm } from "@/components/hoy/registrar-interaccion-form";
 import { ESTADO_CLIENTE_BADGE } from "@/components/ui/estado-badge";
 import { useAppData } from "@/components/providers/app-data-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { bucket, fechaCorta, ultimoContactoTexto, vencimientoTexto } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import type { CanalOrigen, SeguimientoEnriquecido } from "@/lib/types";
+import type {
+  CanalInteraccion,
+  CanalOrigen,
+  SeguimientoEnriquecido,
+} from "@/lib/types";
 
 const CANAL_LABEL: Record<CanalOrigen, string> = {
   web: "Web",
@@ -41,10 +50,21 @@ function telHref(telefono: string): string {
   return `tel:${plus}${t.replace(/[^0-9]/g, "")}`;
 }
 
+/** Canal de interacción → etiqueta e icono para el historial (RAU-116). */
+const CANAL_INTERACCION: Record<
+  CanalInteraccion,
+  { label: string; icon: LucideIcon }
+> = {
+  llamada: { label: "Llamada", icon: Phone },
+  email: { label: "Email", icon: Mail },
+  whatsapp: { label: "WhatsApp", icon: MessageCircle },
+  en_persona: { label: "En persona", icon: Users },
+};
+
 /**
- * Item del historial. Unión discriminada por `tipo`: hoy solo se produce
- * "seguimiento" (completado); RAU-116 (interacción) y RAU-69 (venta) añadirán
- * sus variantes a esta unión sin reescribir el render.
+ * Item del historial. Unión discriminada por `tipo`: "seguimiento" (completado)
+ * e "interaccion" (RAU-116); RAU-69 (venta) añadirá su variante sin reescribir el
+ * render.
  */
 interface HistorialSeguimiento {
   tipo: "seguimiento";
@@ -53,12 +73,30 @@ interface HistorialSeguimiento {
   titulo: string;
   responsable: string;
 }
-type HistorialItem = HistorialSeguimiento;
+interface HistorialInteraccion {
+  tipo: "interaccion";
+  key: string;
+  fecha: Date;
+  titulo: string;
+  canal: CanalInteraccion;
+  autor: string;
+}
+type HistorialItem = HistorialSeguimiento | HistorialInteraccion;
 
 export function FichaClienteClient({ clienteId }: { clienteId: string }) {
-  const { clientes, loading, today, seguimientosDeCliente, marcarHecho, deshacer } =
-    useAppData();
+  const {
+    clientes,
+    loading,
+    today,
+    seguimientosDeCliente,
+    interaccionesDeCliente,
+    marcarHecho,
+    deshacer,
+  } = useAppData();
   const { showToast } = useToast();
+  // Overlay de "Registrar interacción". Declarado ANTES de los return
+  // condicionales de abajo (react-hooks/rules-of-hooks).
+  const [interOpen, setInterOpen] = useState(false);
 
   // Guard: hasta que el provider resuelve `today` (y siembra los clientes) no se
   // puede usar ningún helper de fecha (today es Date | null).
@@ -70,15 +108,30 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
   const estado = ESTADO_CLIENTE_BADGE[cliente.estado];
   const { pendientes, completados } = seguimientosDeCliente(cliente.id);
 
-  const historial: HistorialItem[] = completados.map((s) => ({
-    tipo: "seguimiento",
-    key: `s-${s.id}`,
-    fecha: s.fechaHecho ?? s.vence,
-    titulo: s.accion,
-    responsable: s.responsable.nombre,
-  }));
-  // Ya viene ordenado desc por el selector; interacciones/ventas se mezclarán y
-  // reordenarán aquí por `fecha` cuando existan (RAU-116 / RAU-69).
+  const interacciones = interaccionesDeCliente(cliente.id);
+  // Seguimientos completados + interacciones, mezclados y ordenados desc por fecha
+  // (las ventas se añadirán a la misma lista en RAU-69).
+  const historial: HistorialItem[] = [
+    ...completados.map(
+      (s): HistorialItem => ({
+        tipo: "seguimiento",
+        key: `s-${s.id}`,
+        fecha: s.fechaHecho ?? s.vence,
+        titulo: s.accion,
+        responsable: s.responsable.nombre,
+      }),
+    ),
+    ...interacciones.map(
+      (i): HistorialItem => ({
+        tipo: "interaccion",
+        key: `i-${i.id}`,
+        fecha: i.fecha,
+        titulo: i.texto,
+        canal: i.canal,
+        autor: i.autor.nombre,
+      }),
+    ),
+  ].sort((a, b) => b.fecha.getTime() - a.fecha.getTime());
 
   function marcar(id: string) {
     marcarHecho(id);
@@ -159,7 +212,7 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
         <QuickBtn
           icon={MessageSquarePlus}
           label="Registrar interacción"
-          onClick={() => proximamente("Registrar interacción", "RAU-116")}
+          onClick={() => setInterOpen(true)}
         />
         <QuickBtn
           icon={CalendarPlus}
@@ -209,6 +262,17 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
           </div>
         )}
       </Card>
+
+      <Sheet
+        open={interOpen}
+        onClose={() => setInterOpen(false)}
+        title="Registrar interacción"
+      >
+        <RegistrarInteraccionForm
+          clienteId={cliente.id}
+          onDone={() => setInterOpen(false)}
+        />
+      </Sheet>
     </div>
   );
 }
@@ -321,19 +385,29 @@ function PendienteRow({
 }
 
 function HistorialRow({ item, today }: { item: HistorialItem; today: Date }) {
-  // Discriminado por `item.tipo`; hoy solo "seguimiento" (interacción/venta:
-  // RAU-116 / RAU-69).
+  // Render discriminado por `item.tipo`: interacción (icono por canal) o
+  // seguimiento completado (RAU-69 añadirá "venta").
+  const Icon = item.tipo === "interaccion" ? CANAL_INTERACCION[item.canal].icon : Check;
+  const subtitulo =
+    item.tipo === "interaccion"
+      ? CANAL_INTERACCION[item.canal].label
+      : "Seguimiento completado";
+  const meta =
+    item.tipo === "interaccion"
+      ? `Registrado por ${item.autor}`
+      : `Responsable: ${item.responsable}`;
   return (
     <div className="flex items-start gap-3 border-t border-border py-3 first:border-t-0">
       <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-primary-subtle text-primary">
-        <Check className="h-[18px] w-[18px]" strokeWidth={2} />
+        <Icon
+          className="h-[18px] w-[18px]"
+          strokeWidth={item.tipo === "seguimiento" ? 2 : 1.5}
+        />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[15px] font-medium text-text">{item.titulo}</span>
-        <span className="text-[13px] text-text-muted">Seguimiento completado</span>
-        <span className="text-xs text-text-subtle">
-          Responsable: {item.responsable}
-        </span>
+        <span className="text-[13px] text-text-muted">{subtitulo}</span>
+        <span className="text-xs text-text-subtle">{meta}</span>
       </div>
       <span className="shrink-0 whitespace-nowrap text-xs text-text-subtle">
         {ultimoContactoTexto(item.fecha, today)} · {fechaCorta(item.fecha)}
