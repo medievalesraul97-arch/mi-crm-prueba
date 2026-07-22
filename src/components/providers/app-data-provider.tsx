@@ -12,19 +12,24 @@ import type {
   CanalInteraccion,
   CanalOrigen,
   Cliente,
+  EstadoVenta,
   Interaccion,
   InteraccionEnriquecida,
   Seguimiento,
   SeguimientoEnriquecido,
   Usuario,
+  Venta,
+  VentaEnriquecida,
 } from "@/lib/types";
 import {
   CLIENTES_SEMILLA,
   INTERACCIONES_SEMILLA,
   SEGUIMIENTOS_SEMILLA,
   USUARIOS,
+  VENTAS_SEMILLA,
 } from "@/lib/mock/data";
 import { addDays, bucket, startOfDay } from "@/lib/date";
+import { parseImporteEuros } from "@/lib/format";
 
 export interface CrearSeguimientoInput {
   clienteId: string;
@@ -81,6 +86,26 @@ export type RegistrarInteraccionResultado =
   | { ok: true }
   | { ok: false; errors: ErroresInteraccion };
 
+export interface RegistrarVentaInput {
+  clienteId: string;
+  concepto: string;
+  /** Texto crudo del input; el validador y la mutación lo parsean con `parseImporteEuros`. */
+  importe: string;
+  estado: EstadoVenta;
+  fecha: Date | null;
+}
+
+export interface ErroresVenta {
+  clienteId?: string;
+  concepto?: string;
+  importe?: string;
+  fecha?: string;
+}
+
+export type RegistrarVentaResultado =
+  | { ok: true }
+  | { ok: false; errors: ErroresVenta };
+
 export type LoginResultado = { ok: true } | { ok: false; error: string };
 
 interface AppData {
@@ -118,6 +143,12 @@ interface AppData {
   registrarInteraccion: (
     input: RegistrarInteraccionInput,
   ) => RegistrarInteraccionResultado;
+  /** Ventas registradas (RAU-69), en memoria. */
+  ventas: Venta[];
+  /** Ventas de un cliente para su ficha: enriquecidas y desc por fecha. */
+  ventasDeCliente: (clienteId: string) => VentaEnriquecida[];
+  /** Registra una venta (RAU-69) y avanza `fechaUltimoContacto` del cliente. */
+  registrarVenta: (input: RegistrarVentaInput) => RegistrarVentaResultado;
   /** Login mock: valida por email (cualquier contraseña no vacía). */
   login: (email: string, password: string) => LoginResultado;
   logout: () => void;
@@ -155,12 +186,25 @@ function nuevoInteraccionId(): string {
   return `i-nuevo-${Date.now()}-${seqInteraccion}`;
 }
 
+let seqVenta = 0;
+function nuevoVentaId(): string {
+  seqVenta += 1;
+  return `v-nuevo-${Date.now()}-${seqVenta}`;
+}
+
 /** Canales de interacción válidos, para validar defensivamente en el provider. */
 const CANALES_INTERACCION: readonly CanalInteraccion[] = [
   "llamada",
   "email",
   "whatsapp",
   "en_persona",
+];
+
+/** Estados de venta válidos, para validar defensivamente en el provider. */
+const ESTADOS_VENTA_VALIDOS: readonly EstadoVenta[] = [
+  "abierta",
+  "ganada",
+  "perdida",
 ];
 
 /**
@@ -220,6 +264,29 @@ export function validarSeguimiento(
   return errors;
 }
 
+/**
+ * Validación pura del registro de venta (RAU-69), compartida por `registrarVenta` y el
+ * formulario (errores en vivo tras el primer intento). Fuente única de verdad. Recibe `hoy`
+ * (que debe llegar YA normalizado a inicio de día, p. ej. `today ?? startOfDay(new Date())`)
+ * para el chequeo de fecha futura. No comprueba la existencia del cliente (eso lo hace la
+ * mutación) ni valida `estado` (siempre tiene valor del radiogroup). Devuelve `{}` si no hay
+ * errores.
+ */
+export function validarVenta(
+  input: RegistrarVentaInput,
+  hoy: Date,
+): ErroresVenta {
+  const errors: ErroresVenta = {};
+  if (!input.clienteId) errors.clienteId = "Selecciona un cliente";
+  if (!input.concepto.trim()) errors.concepto = "Indica qué se vende";
+  if (parseImporteEuros(input.importe) === null)
+    errors.importe = "Indica un importe válido";
+  if (!input.fecha) errors.fecha = "Indica una fecha";
+  else if (startOfDay(input.fecha) > hoy)
+    errors.fecha = "La fecha no puede ser futura";
+  return errors;
+}
+
 /** Resuelve la semilla de clientes a `Cliente[]` con la fecha real de último contacto. */
 function resolverClientes(hoy: Date): Cliente[] {
   return CLIENTES_SEMILLA.map((c) => ({
@@ -238,6 +305,7 @@ interface EstadoApp {
   clientes: Cliente[];
   seguimientos: Seguimiento[];
   interacciones: Interaccion[];
+  ventas: Venta[];
   sessionUserId: string | null;
   authLoaded: boolean;
 }
@@ -248,11 +316,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     clientes: [],
     seguimientos: [],
     interacciones: [],
+    ventas: [],
     sessionUserId: null,
     authLoaded: false,
   });
-  const { today, clientes, seguimientos, interacciones, sessionUserId, authLoaded } =
-    state;
+  const {
+    today,
+    clientes,
+    seguimientos,
+    interacciones,
+    ventas,
+    sessionUserId,
+    authLoaded,
+  } = state;
 
   // Al montar (solo cliente): resolver fechas + leer la sesión de localStorage.
   // Se hace tras montar para evitar el mismatch SSR/hidratación.
@@ -275,6 +351,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       fecha: addDays(hoy, -i.fechaOffset),
       autorId: i.autorId,
     }));
+    const ventasResueltas: Venta[] = VENTAS_SEMILLA.map((v) => ({
+      id: v.id,
+      clienteId: v.clienteId,
+      concepto: v.concepto,
+      importe: v.importe,
+      estado: v.estado,
+      fecha: addDays(hoy, -v.fechaOffset),
+      autorId: v.autorId,
+    }));
     let stored: string | null = null;
     try {
       stored = localStorage.getItem(SESSION_KEY);
@@ -296,6 +381,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ],
       seguimientos: resueltos,
       interacciones: interaccionesResueltas,
+      ventas: ventasResueltas,
       sessionUserId: stored,
       authLoaded: true,
     }));
@@ -502,6 +588,61 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }
 
+  function ventasDeCliente(clienteId: string): VentaEnriquecida[] {
+    // Lookup seguro del autor (descarta ventas huérfanas), como `interaccionesDeCliente`.
+    // Orden desc por fecha (más reciente primero).
+    const enriquecer = (v: Venta): VentaEnriquecida | null => {
+      const autor = usuarioPorId.get(v.autorId);
+      return autor ? { ...v, autor } : null;
+    };
+    const noNulo = (v: VentaEnriquecida | null): v is VentaEnriquecida =>
+      v !== null;
+    return ventas
+      .filter((v) => v.clienteId === clienteId)
+      .sort((a, b) => b.fecha.getTime() - a.fecha.getTime())
+      .map(enriquecer)
+      .filter(noNulo);
+  }
+
+  function registrarVenta(
+    input: RegistrarVentaInput,
+  ): RegistrarVentaResultado {
+    const hoy = today ?? startOfDay(new Date());
+    const errors = validarVenta(input, hoy);
+    // Existencia del cliente: el validador puro no conoce el mapa de clientes.
+    if (!errors.clienteId && !clientePorId.has(input.clienteId))
+      errors.clienteId = "Ese cliente no existe";
+    if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+    const fecha = startOfDay(input.fecha!);
+    const nueva: Venta = {
+      id: nuevoVentaId(),
+      clienteId: input.clienteId,
+      concepto: input.concepto.trim(),
+      // No-null asegurado por el validador (mismo criterio que `input.fecha!`).
+      importe: parseImporteEuros(input.importe)!,
+      estado: ESTADOS_VENTA_VALIDOS.includes(input.estado)
+        ? input.estado
+        : "abierta",
+      fecha,
+      autorId: currentUser?.id ?? USUARIOS[0].id,
+    };
+    // setState atómico (mismo patrón que `registrarInteraccion`): añade la venta y avanza
+    // `fechaUltimoContacto` si no había fecha previa o la nueva es igual/posterior. Como la
+    // fecha no puede ser futura (validada arriba), nunca introduce una fecha futura.
+    setState((s) => ({
+      ...s,
+      ventas: [nueva, ...s.ventas],
+      clientes: s.clientes.map((c) =>
+        c.id === input.clienteId &&
+        (!c.fechaUltimoContacto || fecha >= c.fechaUltimoContacto)
+          ? { ...c, fechaUltimoContacto: fecha }
+          : c,
+      ),
+    }));
+    return { ok: true };
+  }
+
   function persistSession(id: string | null) {
     try {
       if (id) localStorage.setItem(SESSION_KEY, id);
@@ -551,6 +692,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     interacciones,
     interaccionesDeCliente,
     registrarInteraccion,
+    ventas,
+    ventasDeCliente,
+    registrarVenta,
     login,
     logout,
     setCurrentUser,
