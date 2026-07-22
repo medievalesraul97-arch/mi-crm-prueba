@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CircleCheckBig } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -22,6 +23,7 @@ export function HoyClient() {
     deshacer,
   } = useAppData();
   const { showToast } = useToast();
+  const router = useRouter();
 
   const [overlay, setOverlay] = useState<Accion | null>(null);
 
@@ -34,8 +36,8 @@ export function HoyClient() {
     });
   }
 
-  function abrirFicha() {
-    showToast({ message: "La ficha de cliente llega en RAU-68" });
+  function abrirFicha(clienteId: string) {
+    router.push(`/clientes/${encodeURIComponent(clienteId)}`);
   }
 
   if (loading || !today) return <HoySkeleton />;
