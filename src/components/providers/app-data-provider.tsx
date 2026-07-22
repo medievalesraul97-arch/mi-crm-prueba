@@ -30,6 +30,8 @@ export interface CrearSeguimientoInput {
   clienteId: string;
   accion: string;
   vence: Date | null;
+  /** Responsable elegido (RAU-72). Opcional: si falta o es inválido, cae al de sesión. */
+  responsableId?: string;
 }
 
 export interface ErroresSeguimiento {
@@ -197,6 +199,24 @@ export function validarInteraccion(
   if (!input.fecha) errors.fecha = "Indica una fecha";
   else if (startOfDay(input.fecha) > hoy)
     errors.fecha = "La fecha no puede ser futura";
+  return errors;
+}
+
+/**
+ * Validación pura de la creación de seguimiento (RAU-72), compartida por
+ * `crearSeguimiento` y el formulario (errores en vivo tras el primer intento).
+ * Fuente única de verdad. No comprueba la existencia del cliente ni la validez del
+ * responsable (eso lo hace la mutación, que sí tiene los mapas). Sin chequeo de
+ * fecha futura: un seguimiento vence en el futuro por diseño. Devuelve `{}` si no
+ * hay errores.
+ */
+export function validarSeguimiento(
+  input: CrearSeguimientoInput,
+): ErroresSeguimiento {
+  const errors: ErroresSeguimiento = {};
+  if (!input.clienteId) errors.clienteId = "Elige un cliente";
+  if (!input.accion.trim()) errors.accion = "Indica qué hay que hacer";
+  if (!input.vence) errors.vence = "Indica una fecha";
   return errors;
 }
 
@@ -375,13 +395,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   function crearSeguimiento(
     input: CrearSeguimientoInput,
   ): CrearSeguimientoResultado {
-    const errors: ErroresSeguimiento = {};
-    if (!input.clienteId) errors.clienteId = "Elige un cliente";
-    else if (!clientePorId.has(input.clienteId))
+    const errors = validarSeguimiento(input);
+    // Existencia del cliente: el validador puro no conoce el mapa de clientes. El
+    // guard `!errors.clienteId` conserva la precedencia (cliente vacío muestra
+    // "Elige un cliente", no "Ese cliente no existe"), como en `registrarInteraccion`.
+    if (!errors.clienteId && !clientePorId.has(input.clienteId))
       errors.clienteId = "Ese cliente no existe";
-    if (!input.accion.trim()) errors.accion = "Escribe qué hay que hacer";
-    if (!input.vence) errors.vence = "Indica una fecha";
     if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+    // Responsable con fallback defensivo: un id inválido o ausente cae al usuario de
+    // sesión (no da error) — "por defecto quien lo crea".
+    const responsableId =
+      input.responsableId && usuarioPorId.has(input.responsableId)
+        ? input.responsableId
+        : currentUser?.id ?? USUARIOS[0].id;
 
     const nuevo: Seguimiento = {
       id: nuevoId(),
@@ -390,7 +417,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       vence: startOfDay(input.vence!),
       hecho: false,
       fechaHecho: undefined,
-      responsableId: currentUser?.id ?? USUARIOS[0].id,
+      responsableId,
     };
     setState((s) => ({ ...s, seguimientos: [...s.seguimientos, nuevo] }));
     return { ok: true };
