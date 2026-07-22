@@ -68,6 +68,15 @@ interface AppData {
   atrasados: SeguimientoEnriquecido[];
   paraHoy: SeguimientoEnriquecido[];
   pendientesCount: number;
+  /**
+   * Seguimientos de un cliente para su ficha (RAU-68): TODOS los pendientes
+   * (cualquier bucket, incluidos los futuros) + los completados, ya enriquecidos
+   * y ordenados. Distinto de `atrasados`/`paraHoy`, que excluyen los futuros.
+   */
+  seguimientosDeCliente: (clienteId: string) => {
+    pendientes: SeguimientoEnriquecido[];
+    completados: SeguimientoEnriquecido[];
+  };
   marcarHecho: (id: string) => void;
   deshacer: (id: string) => void;
   crearSeguimiento: (input: CrearSeguimientoInput) => CrearSeguimientoResultado;
@@ -231,6 +240,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const pendientesCount = atrasados.length + paraHoy.length;
 
+  function seguimientosDeCliente(clienteId: string) {
+    const cliente = clientePorId.get(clienteId);
+    // Enriquecer con lookup seguro: descarta seguimientos cuyo cliente o
+    // responsable no exista (robusto de cara al backend real).
+    const enriquecer = (s: Seguimiento): SeguimientoEnriquecido | null => {
+      const responsable = usuarioPorId.get(s.responsableId);
+      if (!cliente || !responsable) return null;
+      return { ...s, cliente, responsable };
+    };
+    const noNulo = (
+      s: SeguimientoEnriquecido | null,
+    ): s is SeguimientoEnriquecido => s !== null;
+
+    const delCliente = seguimientos.filter((s) => s.clienteId === clienteId);
+    const pendientes = delCliente
+      .filter((s) => !s.hecho)
+      .sort((a, b) => a.vence.getTime() - b.vence.getTime()) // asc por vencimiento
+      .map(enriquecer)
+      .filter(noNulo);
+    const completados = delCliente
+      .filter((s) => s.hecho)
+      .sort(
+        (a, b) =>
+          (b.fechaHecho ?? b.vence).getTime() -
+          (a.fechaHecho ?? a.vence).getTime(),
+      ) // desc por fecha de completado
+      .map(enriquecer)
+      .filter(noNulo);
+    return { pendientes, completados };
+  }
+
   function marcarHecho(id: string) {
     setState((s) => ({
       ...s,
@@ -344,6 +384,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     atrasados,
     paraHoy,
     pendientesCount,
+    seguimientosDeCliente,
     marcarHecho,
     deshacer,
     crearSeguimiento,

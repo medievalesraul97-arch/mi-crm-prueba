@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Search, Users, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet } from "@/components/ui/sheet";
 import { useAppData } from "@/components/providers/app-data-provider";
-import { useToast } from "@/components/providers/toast-provider";
 import { NuevoClienteForm } from "@/components/hoy/nuevo-cliente-form";
 import { ClienteRow } from "./cliente-row";
 
@@ -20,7 +20,7 @@ function soloDigitos(s: string): string {
 
 export function ClientesClient() {
   const { clientes, loading, today } = useAppData();
-  const { showToast } = useToast();
+  const router = useRouter();
 
   const [query, setQuery] = useState("");
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -64,8 +64,8 @@ export function ClientesClient() {
     ? `${filtrados.length} ${filtrados.length === 1 ? "resultado" : "resultados"}`
     : `${clientes.length} ${clientes.length === 1 ? "cliente" : "clientes"}`;
 
-  function abrirFicha() {
-    showToast({ message: "La ficha de cliente llega en RAU-68" });
+  function abrirFicha(id: string) {
+    router.push(`/clientes/${encodeURIComponent(id)}`);
   }
 
   return (

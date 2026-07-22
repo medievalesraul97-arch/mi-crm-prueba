@@ -55,3 +55,23 @@ export function vencidoTexto(vence: Date, today: Date): string {
   if (atraso === 1) return "Venció ayer";
   return `Venció hace ${atraso} días`;
 }
+
+/**
+ * Como `vencidoTexto` pero también cubre el futuro ("Vence el <fecha>"): lo usa
+ * la ficha de cliente, que lista TODOS los pendientes (incluidos los próximos).
+ */
+export function vencimientoTexto(vence: Date, today: Date): string {
+  const atraso = diasEntre(vence, today); // >0 => venció hace N días
+  if (atraso > 1) return `Venció hace ${atraso} días`;
+  if (atraso === 1) return "Venció ayer";
+  if (atraso === 0) return "Vence hoy";
+  return `Vence el ${fechaCorta(vence)}`;
+}
+
+/** Fecha corta local, p. ej. "22 jul" (día + mes abreviado). */
+export function fechaCorta(fecha: Date): string {
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "numeric",
+    month: "short",
+  }).format(fecha);
+}
