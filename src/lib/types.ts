@@ -60,3 +60,22 @@ export interface Interaccion {
 export interface InteraccionEnriquecida extends Interaccion {
   autor: Usuario;
 }
+
+/** Estado de una venta/oportunidad (RAU-69). */
+export type EstadoVenta = "abierta" | "ganada" | "perdida";
+
+export interface Venta {
+  id: string;
+  clienteId: string;
+  concepto: string;
+  /** Euros enteros (el diseño no maneja céntimos). */
+  importe: number;
+  estado: EstadoVenta;
+  fecha: Date;
+  autorId: string;
+}
+
+/** Venta con el autor ya resuelto, para pintar el historial. */
+export interface VentaEnriquecida extends Venta {
+  autor: Usuario;
+}

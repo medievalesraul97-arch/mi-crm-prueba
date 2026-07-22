@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   ArrowLeft,
   CalendarPlus,
@@ -26,14 +26,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CheckRedondo } from "@/components/hoy/check-redondo";
 import { ProgramarSeguimientoForm } from "@/components/hoy/programar-seguimiento-form";
 import { RegistrarInteraccionForm } from "@/components/hoy/registrar-interaccion-form";
+import { RegistrarVentaForm } from "@/components/hoy/registrar-venta-form";
 import { ESTADO_CLIENTE_BADGE } from "@/components/ui/estado-badge";
+import {
+  ESTADO_VENTA_BADGE,
+  IMPORTE_VENTA_CLASE,
+} from "@/components/ui/estado-venta-badge";
 import { useAppData } from "@/components/providers/app-data-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { bucket, fechaCorta, ultimoContactoTexto, vencimientoTexto } from "@/lib/date";
+import { formatoEuro } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type {
   CanalInteraccion,
   CanalOrigen,
+  EstadoVenta,
   SeguimientoEnriquecido,
 } from "@/lib/types";
 
@@ -63,9 +70,8 @@ const CANAL_INTERACCION: Record<
 };
 
 /**
- * Item del historial. Unión discriminada por `tipo`: "seguimiento" (completado)
- * e "interaccion" (RAU-116); RAU-69 (venta) añadirá su variante sin reescribir el
- * render.
+ * Item del historial. Unión discriminada por `tipo`: "seguimiento" (completado),
+ * "interaccion" (RAU-116) y "venta" (RAU-69).
  */
 interface HistorialSeguimiento {
   tipo: "seguimiento";
@@ -82,7 +88,19 @@ interface HistorialInteraccion {
   canal: CanalInteraccion;
   autor: string;
 }
-type HistorialItem = HistorialSeguimiento | HistorialInteraccion;
+interface HistorialVenta {
+  tipo: "venta";
+  key: string;
+  fecha: Date;
+  titulo: string;
+  importe: number;
+  estado: EstadoVenta;
+  autor: string;
+}
+type HistorialItem =
+  | HistorialSeguimiento
+  | HistorialInteraccion
+  | HistorialVenta;
 
 export function FichaClienteClient({ clienteId }: { clienteId: string }) {
   const {
@@ -91,6 +109,7 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
     today,
     seguimientosDeCliente,
     interaccionesDeCliente,
+    ventasDeCliente,
     marcarHecho,
     deshacer,
   } = useAppData();
@@ -99,6 +118,7 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
   // abajo (react-hooks/rules-of-hooks).
   const [interOpen, setInterOpen] = useState(false);
   const [segOpen, setSegOpen] = useState(false);
+  const [ventaOpen, setVentaOpen] = useState(false);
 
   // Guard: hasta que el provider resuelve `today` (y siembra los clientes) no se
   // puede usar ningún helper de fecha (today es Date | null).
@@ -111,8 +131,8 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
   const { pendientes, completados } = seguimientosDeCliente(cliente.id);
 
   const interacciones = interaccionesDeCliente(cliente.id);
-  // Seguimientos completados + interacciones, mezclados y ordenados desc por fecha
-  // (las ventas se añadirán a la misma lista en RAU-69).
+  const ventas = ventasDeCliente(cliente.id);
+  // Seguimientos completados + interacciones + ventas, mezclados y ordenados desc por fecha.
   const historial: HistorialItem[] = [
     ...completados.map(
       (s): HistorialItem => ({
@@ -131,6 +151,17 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
         titulo: i.texto,
         canal: i.canal,
         autor: i.autor.nombre,
+      }),
+    ),
+    ...ventas.map(
+      (v): HistorialItem => ({
+        tipo: "venta",
+        key: `v-${v.id}`,
+        fecha: v.fecha,
+        titulo: v.concepto,
+        importe: v.importe,
+        estado: v.estado,
+        autor: v.autor.nombre,
       }),
     ),
   ].sort((a, b) => b.fecha.getTime() - a.fecha.getTime());
@@ -224,7 +255,7 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
         <QuickBtn
           icon={TrendingUp}
           label="Registrar venta"
-          onClick={() => proximamente("Registrar venta", "RAU-69")}
+          onClick={() => setVentaOpen(true)}
         />
       </div>
 
@@ -284,6 +315,17 @@ export function FichaClienteClient({ clienteId }: { clienteId: string }) {
         <ProgramarSeguimientoForm
           clienteId={cliente.id}
           onDone={() => setSegOpen(false)}
+        />
+      </Sheet>
+
+      <Sheet
+        open={ventaOpen}
+        onClose={() => setVentaOpen(false)}
+        title="Registrar venta"
+      >
+        <RegistrarVentaForm
+          clienteId={cliente.id}
+          onDone={() => setVentaOpen(false)}
         />
       </Sheet>
     </div>
@@ -397,34 +439,93 @@ function PendienteRow({
   );
 }
 
+/**
+ * Config de fila del historial por `item.tipo` (ramas explícitas, no ternarios anidados):
+ * cada tipo define su icono, subtítulo (texto o Badge), meta y columna derecha. La venta
+ * muestra el importe destacado (color por estado) encima de la fecha.
+ */
+function historialFila(
+  item: HistorialItem,
+  today: Date,
+): {
+  Icon: LucideIcon;
+  strokeWidth: number;
+  subtituloNode: ReactNode;
+  meta: string;
+  derechaNode: ReactNode;
+} {
+  const fechaTexto = `${ultimoContactoTexto(item.fecha, today)} · ${fechaCorta(item.fecha)}`;
+  const fechaNode = (
+    <span className="shrink-0 whitespace-nowrap text-xs text-text-subtle">
+      {fechaTexto}
+    </span>
+  );
+  switch (item.tipo) {
+    case "interaccion":
+      return {
+        Icon: CANAL_INTERACCION[item.canal].icon,
+        strokeWidth: 1.5,
+        subtituloNode: (
+          <span className="text-[13px] text-text-muted">
+            {CANAL_INTERACCION[item.canal].label}
+          </span>
+        ),
+        meta: `Registrado por ${item.autor}`,
+        derechaNode: fechaNode,
+      };
+    case "seguimiento":
+      return {
+        Icon: Check,
+        strokeWidth: 2,
+        subtituloNode: (
+          <span className="text-[13px] text-text-muted">Seguimiento completado</span>
+        ),
+        meta: `Responsable: ${item.responsable}`,
+        derechaNode: fechaNode,
+      };
+    case "venta":
+      return {
+        Icon: TrendingUp,
+        strokeWidth: 1.5,
+        subtituloNode: (
+          <Badge tone={ESTADO_VENTA_BADGE[item.estado].tone} className="w-fit">
+            {ESTADO_VENTA_BADGE[item.estado].label}
+          </Badge>
+        ),
+        meta: `Registrado por ${item.autor}`,
+        derechaNode: (
+          <span className="flex shrink-0 flex-col items-end gap-0.5 whitespace-nowrap text-right">
+            <span
+              className={cn(
+                "font-mono text-sm font-semibold tabular-nums",
+                IMPORTE_VENTA_CLASE[item.estado],
+              )}
+            >
+              {formatoEuro(item.importe)}
+            </span>
+            <span className="text-xs text-text-subtle">{fechaTexto}</span>
+          </span>
+        ),
+      };
+  }
+}
+
 function HistorialRow({ item, today }: { item: HistorialItem; today: Date }) {
-  // Render discriminado por `item.tipo`: interacción (icono por canal) o
-  // seguimiento completado (RAU-69 añadirá "venta").
-  const Icon = item.tipo === "interaccion" ? CANAL_INTERACCION[item.canal].icon : Check;
-  const subtitulo =
-    item.tipo === "interaccion"
-      ? CANAL_INTERACCION[item.canal].label
-      : "Seguimiento completado";
-  const meta =
-    item.tipo === "interaccion"
-      ? `Registrado por ${item.autor}`
-      : `Responsable: ${item.responsable}`;
+  const { Icon, strokeWidth, subtituloNode, meta, derechaNode } = historialFila(
+    item,
+    today,
+  );
   return (
     <div className="flex items-start gap-3 border-t border-border py-3 first:border-t-0">
       <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-primary-subtle text-primary">
-        <Icon
-          className="h-[18px] w-[18px]"
-          strokeWidth={item.tipo === "seguimiento" ? 2 : 1.5}
-        />
+        <Icon className="h-[18px] w-[18px]" strokeWidth={strokeWidth} />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[15px] font-medium text-text">{item.titulo}</span>
-        <span className="text-[13px] text-text-muted">{subtitulo}</span>
+        {subtituloNode}
         <span className="text-xs text-text-subtle">{meta}</span>
       </div>
-      <span className="shrink-0 whitespace-nowrap text-xs text-text-subtle">
-        {ultimoContactoTexto(item.fecha, today)} · {fechaCorta(item.fecha)}
-      </span>
+      {derechaNode}
     </div>
   );
 }

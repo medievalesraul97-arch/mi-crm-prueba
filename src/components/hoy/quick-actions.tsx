@@ -11,6 +11,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { NuevaTareaForm } from "./nueva-tarea-form";
 import { NuevoClienteForm } from "./nuevo-cliente-form";
 import { RegistrarInteraccionForm } from "./registrar-interaccion-form";
+import { RegistrarVentaForm } from "./registrar-venta-form";
 import { cn } from "@/lib/utils";
 
 export type Accion = "tarea" | "interaccion" | "venta" | "cliente";
@@ -20,14 +21,13 @@ interface Tile {
   label: string;
   icon: LucideIcon;
   destacada?: boolean;
-  rau?: string;
 }
 
 const TILES: Tile[] = [
   { key: "tarea", label: "Nueva tarea", icon: ClipboardList, destacada: true },
   { key: "interaccion", label: "Anotar interacción", icon: MessageSquare },
-  { key: "venta", label: "Registrar venta", icon: TrendingUp, rau: "RAU-69" },
-  { key: "cliente", label: "Nuevo cliente", icon: UserPlus, rau: "RAU-66" },
+  { key: "venta", label: "Registrar venta", icon: TrendingUp },
+  { key: "cliente", label: "Nuevo cliente", icon: UserPlus },
 ];
 
 const TITULOS: Record<Accion, string> = {
@@ -69,8 +69,8 @@ export function QuickActions({ onOpen }: { onOpen: (accion: Accion) => void }) {
 }
 
 /**
- * Overlay de la acción abierta. Nueva tarea, Nuevo cliente y Registrar interacción
- * son funcionales; Registrar venta sigue como stub etiquetado (RAU-69).
+ * Overlay de la acción abierta. Las cuatro acciones (Nueva tarea, Nuevo cliente,
+ * Registrar interacción y Registrar venta) son funcionales.
  */
 export function AccionOverlay({
   abierta,
@@ -79,7 +79,6 @@ export function AccionOverlay({
   abierta: Accion | null;
   onClose: () => void;
 }) {
-  const rau = TILES.find((t) => t.key === abierta)?.rau;
   return (
     <Sheet
       open={abierta !== null}
@@ -92,12 +91,9 @@ export function AccionOverlay({
         <NuevoClienteForm onDone={onClose} />
       ) : abierta === "interaccion" ? (
         <RegistrarInteraccionForm onDone={onClose} />
-      ) : (
-        <p className="py-2 text-sm text-text-muted">
-          Este formulario se implementa en {rau}. Abrirá el overlay con selector
-          de cliente sobre los mismos datos.
-        </p>
-      )}
+      ) : abierta === "venta" ? (
+        <RegistrarVentaForm onDone={onClose} />
+      ) : null}
     </Sheet>
   );
 }
