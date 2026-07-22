@@ -24,3 +24,13 @@ export const IMPORTE_VENTA_CLASE: Record<EstadoVenta, string> = {
   ganada: "text-success-text",
   perdida: "text-error-text",
 };
+
+/**
+ * Fondo + color del icono de una venta (el `iconWrap` coloreado por estado del prototipo),
+ * p. ej. en el listado de `/ventas`. Clases literales (no dinámicas).
+ */
+export const ICONO_VENTA_WRAP: Record<EstadoVenta, string> = {
+  abierta: "bg-info-bg text-info",
+  ganada: "bg-success-bg text-success",
+  perdida: "bg-error-bg text-error",
+};
