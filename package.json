@@ -13,6 +13,8 @@
     "convex:dev": "convex dev"
   },
   "dependencies": {
+    "@auth/core": "^0.41.3",
+    "@convex-dev/auth": "^0.0.95",
     "clsx": "^2.1.1",
     "convex": "^1.42.3",
     "lucide-react": "^1.25.0",
@@ -28,6 +30,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "jose": "^6.2.8",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

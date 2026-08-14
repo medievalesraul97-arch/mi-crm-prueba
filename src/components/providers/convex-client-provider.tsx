@@ -1,6 +1,7 @@
 "use client";
 
-import { ConvexProvider, ConvexReactClient } from "convex/react";
+import { ConvexReactClient } from "convex/react";
+import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ReactNode } from "react";
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -8,6 +9,8 @@ const convex = convexUrl ? new ConvexReactClient(convexUrl) : null;
 
 // Hasta que se ejecute `npx convex dev` y se complete .env.local no hay URL de
 // despliegue: en ese caso renderizamos sin provider en vez de romper el arranque.
+// `AppDataProvider` (RAU-87) es quien deja de llamar a ningún hook de Convex
+// Auth en ese caso - no este provider (ver AppDataProviderSinBackend).
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
   if (!convex) {
     if (process.env.NODE_ENV !== "production") {
@@ -19,5 +22,5 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  return <ConvexProvider client={convex}>{children}</ConvexProvider>;
+  return <ConvexAuthProvider client={convex}>{children}</ConvexAuthProvider>;
 }

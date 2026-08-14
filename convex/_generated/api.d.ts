@@ -8,9 +8,13 @@
  * @module
  */
 
+import type * as auth from "../auth.js";
 import type * as clientes from "../clientes.js";
+import type * as http from "../http.js";
+import type * as model_auth from "../model/auth.js";
 import type * as model_clientes from "../model/clientes.js";
 import type * as seed from "../seed.js";
+import type * as usuarios from "../usuarios.js";
 
 import type {
   ApiFromModules,
@@ -19,9 +23,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  auth: typeof auth;
   clientes: typeof clientes;
+  http: typeof http;
+  "model/auth": typeof model_auth;
   "model/clientes": typeof model_clientes;
   seed: typeof seed;
+  usuarios: typeof usuarios;
 }>;
 
 /**

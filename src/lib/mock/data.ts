@@ -20,13 +20,15 @@ export interface SeguimientoSemilla {
   responsableId: string;
 }
 
+// Sigue en uso (RAU-87): sirve al subsistema mock de seguimientos/
+// interacciones/ventas (aún no conectado a Convex). `currentUser` real se
+// traduce a estos mismos ids por email en AppDataProviderConAuth - por eso
+// el bootstrap de autenticación DEBE crear las cuentas con exactamente
+// estos 2 emails.
 export const USUARIOS: Usuario[] = [
   { id: "u-marta", nombre: "Marta Ruiz", email: "marta@vibecrm.es", rol: "propietaria" },
   { id: "u-carlos", nombre: "Carlos Gómez", email: "carlos@vibecrm.es", rol: "comercial" },
 ];
-
-/** Usuario con sesión iniciada por defecto (mock; el login real es RAU-87). */
-export const USUARIO_ACTUAL_ID = "u-marta";
 
 /**
  * Semilla de clientes. `ultimoContactoOffset` es días atrás (≥0) respecto a HOY;
