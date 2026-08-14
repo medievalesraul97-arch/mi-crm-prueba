@@ -1,7 +1,12 @@
 // Model layer de clientes (RAU-63). Funciones reutilizables que reciben el ctx
-// de una mutation: aquí vive la lógica de negocio y las mutations quedan finas.
-// Las tareas de pantalla (RAU-69/72/116) y los 3 disparadores de RAU-71 deben
-// llamar a estas funciones en vez de duplicar la regla.
+// de una mutation: aquí vive la lógica de fechaUltimoContacto; las mutations
+// quedan finas. Las tareas de pantalla (RAU-69/72/116) y los 3 disparadores de
+// RAU-71 deben llamar a estas funciones en vez de duplicar la regla.
+//
+// OJO: crearCliente NO valida "al menos teléfono o email" (schema.ts documenta
+// esa regla como responsabilidad de las mutations, no del esquema). El
+// llamador debe validar antes de llamar, reutilizando validarCliente de
+// src/components/providers/app-data-provider.tsx cuando se porte a Convex.
 import type { WithoutSystemFields } from "convex/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -18,7 +23,8 @@ export type NuevoCliente = Omit<
 
 /**
  * Crea un cliente aplicando el caso "recién creado" de RAU-71:
- * `fechaUltimoContacto` arranca igual a `fechaRegistro`.
+ * `fechaUltimoContacto` arranca igual a `fechaRegistro`. No valida `datos`
+ * (ver nota de cabecera): el llamador es responsable de esa validación.
  */
 export async function crearCliente(
   ctx: MutationCtx,

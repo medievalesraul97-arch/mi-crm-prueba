@@ -143,7 +143,6 @@ export const ejecutar = internalMutation({
       { clienteId: "c-6", accion: "Seguimiento tras la reunión", venceOffset: 3, responsableId: uCarlos },
       { clienteId: "c-1", accion: "Agradecer la última compra", venceOffset: -5, hecho: true, responsableId: uMarta },
     ];
-    let contadorSeguimientos = 0;
     for (const s of seguimientosSemilla) {
       const hecho = s.hecho ?? false;
       await ctx.db.insert("seguimientos", {
@@ -155,7 +154,6 @@ export const ejecutar = internalMutation({
         fechaHecho: hecho ? ahora : undefined,
         responsableId: s.responsableId,
       });
-      contadorSeguimientos++;
     }
 
     // --- interacciones ----------------------------------------------------
@@ -165,7 +163,6 @@ export const ejecutar = internalMutation({
       { clienteId: "c-1", canal: "llamada" as const, texto: "Llamada para repasar la propuesta; le encaja el presupuesto, pide un par de ajustes.", fechaOffset: 0, autorId: uMarta },
       { clienteId: "c-1", canal: "email" as const, texto: "Enviado el catálogo actualizado por email tras la feria.", fechaOffset: 5, autorId: uCarlos },
     ];
-    let contadorInteracciones = 0;
     for (const i of interaccionesSemilla) {
       const clienteId = idsClientes[i.clienteId];
       const fecha = diasAtras(i.fechaOffset);
@@ -177,7 +174,6 @@ export const ejecutar = internalMutation({
         autorId: i.autorId,
       });
       await avanzarFechaUltimoContacto(ctx, clienteId, fecha);
-      contadorInteracciones++;
     }
 
     // --- ventas -------------------------------------------------------
@@ -188,7 +184,6 @@ export const ejecutar = internalMutation({
       { clienteId: "c-1", concepto: "Servicio de configuración inicial", importe: 1200, estado: "ganada" as const, fechaOffset: 17, autorId: uMarta },
       { clienteId: "c-4", concepto: "Formación del equipo", importe: 1500, estado: "abierta" as const, fechaOffset: 30, autorId: uCarlos },
     ];
-    let contadorVentas = 0;
     for (const venta of ventasSemilla) {
       const clienteId = idsClientes[venta.clienteId];
       const fecha = diasAtras(venta.fechaOffset);
@@ -201,15 +196,14 @@ export const ejecutar = internalMutation({
         autorId: venta.autorId,
       });
       await avanzarFechaUltimoContacto(ctx, clienteId, fecha);
-      contadorVentas++;
     }
 
     return {
       usuarios: 2,
       clientes: clientesSemilla.length + 1,
-      seguimientos: contadorSeguimientos,
-      interacciones: contadorInteracciones,
-      ventas: contadorVentas,
+      seguimientos: seguimientosSemilla.length,
+      interacciones: interaccionesSemilla.length,
+      ventas: ventasSemilla.length,
     };
   },
 });
