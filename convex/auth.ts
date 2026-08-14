@@ -1,20 +1,47 @@
 // Autenticación real (RAU-87): proveedor Password de @convex-dev/auth. El
-// diseño exige email+contraseña (no passkeys/OAuth) para las 2 personas
-// reales del equipo. Sin registro público: el alta solo ocurre a través del
-// bootstrap admin-only (ver scripts/bootstrap-admin.mjs), nunca desde la
-// pantalla de login.
+// diseño exigía email+contraseña (no passkeys/OAuth) para las 2 personas
+// reales del equipo. RAU-213 añade Google como segundo método, CONVIVIENDO
+// con el de contraseña - sigue habiendo cero registro público por ninguno
+// de los dos: el alta de un perfil nuevo solo ocurre a través del bootstrap
+// admin-only (ver scripts/bootstrap-admin.mjs) o, más adelante, RAU-111;
+// Google solo puede entrar a un perfil YA provisionado (ver
+// model/auth.ts::vincularUsuarioGoogle).
 import { convexAuth } from "@convex-dev/auth/server";
 import { Password } from "@convex-dev/auth/providers/Password";
+import Google from "@auth/core/providers/google";
 import { ConvexError } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
 import {
   passwordTemporalCaducada,
   requireVentanaBootstrap,
+  vincularUsuarioGoogle,
   TTL_PASSWORD_TEMPORAL_MS,
 } from "./model/auth";
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
+    Google({
+      // El `profile()` por defecto de @auth/core (defaultProfile en
+      // @convex-dev/auth/server/provider_utils.ts) mapea solo
+      // {id,name,email,image} y descarta `email_verified` - lo conservamos
+      // aquí porque vincularUsuarioGoogle lo exige antes de aceptar.
+      // Se manda dos veces a propósito: `email_verified` (nombre del claim
+      // OIDC de Google) es lo que lee vincularUsuarioGoogle; `emailVerified`
+      // (camelCase) es la clave que la propia librería usa por su cuenta en
+      // createOrUpdateAccount (server/implementation/users.ts) para marcar
+      // la fila `authAccounts` - sin ella esa fila quedaría sin marcar,
+      // aunque no lo use ninguna lógica de este backend.
+      profile(profile) {
+        return {
+          id: profile.sub,
+          name: profile.name,
+          email: profile.email,
+          image: profile.picture,
+          email_verified: profile.email_verified,
+          emailVerified: profile.email_verified,
+        };
+      },
+    }),
     Password({
       profile(params) {
         // Asignado a variable (no literal): evita el excess-property-check
@@ -52,7 +79,20 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       // .withIndex(...)` no tipa contra nuestros índices reales.
       const ctx = ctxGenerico as unknown as MutationCtx;
 
-      // Sign-in de una cuenta que ya existe: nada que crear.
+      // Google (RAU-213): SIEMPRE antes del atajo de existingUserId de
+      // abajo, incluso en reingresos con una cuenta de Google ya enlazada -
+      // vincularUsuarioGoogle revalida el perfil por email en cada login,
+      // no solo la primera vez (si no, revocar/reasignar un perfil no
+      // cerraría el acceso de una cuenta de Google ya vinculada; hallazgo
+      // de Auditoría sobre el plan de esta tarea). Se comprueba
+      // `provider.id === "google"` explícitamente, no solo
+      // `type === "oauth"`, para no autorizar sin querer un proveedor OAuth
+      // futuro que se añada sin decidir esto.
+      if (args.type === "oauth" && args.provider.id === "google") {
+        return await vincularUsuarioGoogle(ctx, args.existingUserId, args.profile);
+      }
+
+      // Sign-in de una cuenta que ya existe (password): nada que crear.
       if (args.existingUserId) return args.existingUserId;
 
       // Alta nueva (flow "signUp"). `signIn` es una action PÚBLICA: sin

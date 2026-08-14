@@ -1,7 +1,7 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { type FormEvent, Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,18 +11,55 @@ import {
 } from "@/components/providers/app-data-provider";
 import { cn } from "@/lib/utils";
 
-// Pantalla de inicio de sesión (RAU-87, autenticación real vía Convex Auth).
-// Validación inline (email con formato válido, contraseña no vacía) solo tras
-// el primer intento de envío, mismo patrón que el resto de formularios del
-// CRM (ver validarCliente et al.).
+// Lee `?code=`/`?oauthIntento=` de la URL tras volver de Google (RAU-213) y
+// dispara el resultado correspondiente. Aislado en su propio componente
+// envuelto en <Suspense> porque `useSearchParams` lo exige en build de
+// producción (si no, "Missing Suspense boundary" - confirmado contra la
+// doc de Next.js empaquetada en node_modules/next/dist/docs, ver AGENTS.md).
+function GoogleRedirectHandler({
+  onCode,
+  onRechazo,
+}: {
+  onCode: (code: string) => void;
+  onRechazo: () => void;
+}) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  // Evita procesar el mismo `code`/`oauthIntento` dos veces en React Strict
+  // Mode (dev) - mismo motivo que el propio @convex-dev/auth usa un ref
+  // análogo (`signingInWithCodeFromURL`) en su manejo automático.
+  const manejado = useRef(false);
+
+  useEffect(() => {
+    if (manejado.current) return;
+    const code = searchParams.get("code");
+    const oauthIntento = searchParams.get("oauthIntento");
+    if (!code && !oauthIntento) return;
+    manejado.current = true;
+    router.replace("/login");
+    if (code) onCode(code);
+    else onRechazo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  return null;
+}
+
+// Pantalla de inicio de sesión (RAU-87, autenticación real vía Convex Auth;
+// RAU-213 añade Google conviviendo con el login por contraseña). Validación
+// inline (email con formato válido, contraseña no vacía) solo tras el
+// primer intento de envío, mismo patrón que el resto de formularios del CRM
+// (ver validarCliente et al.).
 export default function LoginPage() {
-  const { authLoaded, currentUser, login } = useAppData();
+  const { authLoaded, currentUser, login, loginConGoogle, completarLoginGoogle } =
+    useAppData();
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [tried, setTried] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +67,33 @@ export default function LoginPage() {
   useEffect(() => {
     if (authLoaded && currentUser) router.replace("/hoy");
   }, [authLoaded, currentUser, router]);
+
+  async function onGoogleCode(code: string) {
+    setError(null);
+    setGoogleLoading(true);
+    const res = await completarLoginGoogle(code);
+    setGoogleLoading(false);
+    if (!res.ok) setError(res.error);
+  }
+
+  function onGoogleRechazo() {
+    setError(
+      "No se pudo completar el acceso con Google. Si tu cuenta no está autorizada, pide que te den de alta.",
+    );
+  }
+
+  async function onGoogleClick() {
+    setError(null);
+    setGoogleLoading(true);
+    const res = await loginConGoogle();
+    // Solo se llega aquí si `loginConGoogle` falló ANTES de redirigir
+    // (p. ej. red caída) - en el caso normal, el navegador ya navegó fuera
+    // de esta página y este código nunca continúa.
+    if (!res.ok) {
+      setError(res.error);
+      setGoogleLoading(false);
+    }
+  }
 
   const errores = validarLogin(email, password);
 
@@ -49,17 +113,30 @@ export default function LoginPage() {
     router.replace("/hoy");
   }
 
+  // GoogleRedirectHandler se monta siempre (también durante el loader de
+  // abajo) para procesar `?code=`/`?oauthIntento=` en cuanto vuelva de
+  // Google, sin esperar a que se resuelva `authLoaded`.
+  const redirectHandler = (
+    <Suspense fallback={null}>
+      <GoogleRedirectHandler onCode={onGoogleCode} onRechazo={onGoogleRechazo} />
+    </Suspense>
+  );
+
   // Evita el parpadeo del formulario mientras carga la sesión / si ya hay una.
   if (!authLoaded || currentUser) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-bg">
-        <div className="h-8 w-8 animate-vibe-spin rounded-full border-[3px] border-surface-2 border-t-primary" />
-      </div>
+      <>
+        {redirectHandler}
+        <div className="flex min-h-dvh items-center justify-center bg-bg">
+          <div className="h-8 w-8 animate-vibe-spin rounded-full border-[3px] border-surface-2 border-t-primary" />
+        </div>
+      </>
     );
   }
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-bg px-4">
+      {redirectHandler}
       <div className="w-full max-w-[400px]">
         <div className="mb-6 flex items-center justify-center gap-2">
           <span className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] bg-primary text-lg font-semibold text-on-primary">
@@ -84,7 +161,23 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={submit} className="mt-4 flex flex-col gap-4" noValidate>
+          <Button
+            type="button"
+            variant="secondary"
+            className="mt-4 w-full"
+            loading={googleLoading}
+            onClick={onGoogleClick}
+          >
+            Continuar con Google
+          </Button>
+
+          <div className="my-4 flex items-center gap-3 text-[13px] text-text-subtle">
+            <div className="h-px flex-1 bg-border" />
+            o
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
             <Input
               label="Email"
               type="email"

@@ -23,10 +23,14 @@ export interface SeguimientoSemilla {
 // Sigue en uso (RAU-87): sirve al subsistema mock de seguimientos/
 // interacciones/ventas (aún no conectado a Convex). `currentUser` real se
 // traduce a estos mismos ids por email en AppDataProviderConAuth - por eso
-// el bootstrap de autenticación DEBE crear las cuentas con exactamente
-// estos 2 emails.
+// las cuentas de autenticación (bootstrap RAU-87 + login Google RAU-213)
+// DEBEN usar exactamente estos 2 emails. El de la propietaria pasó a ser el
+// email real de Raúl (RAU-213) para poder entrar con Google como ella; el
+// login por contraseña sigue usando el email antiguo `marta@vibecrm.es`
+// como identificador de esa credencial (ver convex/auth.ts) - son dos vías
+// de entrada a la misma cuenta, este mock solo necesita el email "actual".
 export const USUARIOS: Usuario[] = [
-  { id: "u-marta", nombre: "Marta Ruiz", email: "marta@vibecrm.es", rol: "propietaria" },
+  { id: "u-marta", nombre: "Marta Ruiz", email: "agenteavaloria@gmail.com", rol: "propietaria" },
   { id: "u-carlos", nombre: "Carlos Gómez", email: "carlos@vibecrm.es", rol: "comercial" },
 ];
 

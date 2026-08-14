@@ -4,7 +4,7 @@
 // lógica de negocio fuera de las mutations/queries finas.
 import { ConvexError } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 /** Lanza si no hay sesión válida o no tiene perfil `usuarios` asociado.
@@ -79,4 +79,77 @@ export function passwordTemporalCaducada(perfil: {
   if (!perfil.debeCambiarPassword) return false;
   const expiraEn = perfil.passwordTemporalExpiraEn;
   return !Number.isFinite(expiraEn) || Date.now() > (expiraEn as number);
+}
+
+// --- Login con Google, registro cerrado (RAU-213) --------------------------
+// Sin registro público tampoco por Google: solo entra quien ya tiene un
+// perfil `usuarios` provisionado (por el bootstrap de RAU-87 o la futura
+// alta de RAU-111) cuyo email coincide con el de la cuenta de Google. Esta
+// función sustituye por completo el enlace-por-email por defecto de
+// @convex-dev/auth, que NO se ejecuta aquí porque `createOrUpdateUser` ya es
+// un callback custom (convex/auth.ts) - verificado contra el código fuente
+// de @convex-dev/auth (server/implementation/users.ts): el enlace por
+// defecto solo corre cuando `config.callbacks.createOrUpdateUser` es
+// `undefined`.
+//
+// `existingUserId` se revalida en CADA llamada, no solo quedan primer
+// enlace: si viene no-null (ya existe una fila `authAccounts` para esta
+// cuenta de Google), igual se vuelve a resolver el perfil por el email
+// actual y se exige que `perfil.authUserId` siga siendo exactamente ese
+// mismo usuario. Sin este chequeo, revocar el acceso de alguien (borrar su
+// fila `usuarios` o reasignar el email a otra persona) no bastaría: su
+// cuenta de Google ya vinculada seguiría entrando por el atajo de
+// `existingUserId` en `createOrUpdateUser` (hallazgo de Auditoría, Plan
+// nº 1 → nº 2 de RAU-213).
+export async function vincularUsuarioGoogle(
+  ctx: MutationCtx,
+  existingUserId: Id<"users"> | null,
+  profile: Record<string, unknown>,
+): Promise<Id<"users">> {
+  const email = typeof profile.email === "string" ? profile.email.trim() : "";
+  if (!email) {
+    throw new ConvexError("Acceso con Google rechazado: perfil sin email.");
+  }
+  // El `profile()` por defecto de @auth/core descarta `email_verified`;
+  // convex/auth.ts define un `profile()` custom para el proveedor Google
+  // que sí lo conserva - defensa en profundidad, ya que completar el
+  // intercambio OAuth con Google ya implica una cuenta con email verificado
+  // en la inmensa mayoría de los casos.
+  if (profile.email_verified !== true) {
+    throw new ConvexError("Acceso con Google rechazado: email no verificado.");
+  }
+
+  const perfil = await ctx.db
+    .query("usuarios")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .unique();
+  if (perfil === null) {
+    throw new ConvexError(
+      "Acceso no autorizado: tu cuenta de Google no corresponde a ningún usuario dado de alta en el CRM.",
+    );
+  }
+
+  if (existingUserId !== null) {
+    if (perfil.authUserId !== existingUserId) {
+      throw new ConvexError(
+        "Acceso no autorizado: el email ya no está vinculado a esta cuenta de Google.",
+      );
+    }
+    return existingUserId;
+  }
+
+  // Primer login con Google para este perfil. Si ya tiene `authUserId`
+  // (típicamente de su alta por contraseña, RAU-87), Google se enlaza a la
+  // MISMA cuenta - createOrUpdateAccount (librería) crea la fila
+  // `authAccounts` nueva con provider "google" sobre este `userId`, sin que
+  // haga falta tocar nada más aquí.
+  if (perfil.authUserId !== undefined) return perfil.authUserId;
+
+  // Defensivo: perfil provisionado pero sin ninguna credencial todavía (no
+  // ocurre hoy con Marta/Carlos, ambos ya tienen authUserId por el
+  // bootstrap) - mismo patrón que el caso análogo de createOrUpdateUser
+  // para el flujo de contraseña (convex/auth.ts).
+  const userId = await ctx.db.insert("users", { email });
+  await ctx.db.patch(perfil._id, { authUserId: userId });
+  return userId;
 }
