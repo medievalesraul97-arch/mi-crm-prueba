@@ -1,6 +1,8 @@
 // Seed de verificación para RAU-63: demuestra que las 5 entidades se pueden
 // crear con sus relaciones y ejercita el helper de fechaUltimoContacto
 // (model/clientes.ts) en sus dos ramas ("avanza" / "no retrocede").
+// `usuarios` es la excepción desde RAU-87: no se crea aquí, se busca (ver
+// más abajo) - las cuentas reales las crea el bootstrap de autenticación.
 //
 // Autocontenido a propósito: replica (no importa) las semillas de
 // `src/lib/mock/data.ts:46-106`, cuyos comentarios documentan los invariantes
@@ -16,8 +18,11 @@ import { internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { avanzarFechaUltimoContacto, crearCliente } from "./model/clientes";
 
+// `usuarios` NO está aquí a propósito (RAU-87): su ciclo de vida ya no lo
+// controla este seed, lo controla el bootstrap de autenticación
+// (scripts/bootstrap-admin.mjs + convex/auth.ts) - un reseed no debe borrar
+// las cuentas de login reales de Marta y Carlos.
 const TABLAS = [
-  "usuarios",
   "clientes",
   "seguimientos",
   "interacciones",
@@ -77,17 +82,28 @@ export const ejecutar = internalMutation({
     const ahora = Date.now();
     const diasAtras = (n: number) => ahora - n * 86_400_000;
 
-    // --- usuarios ---------------------------------------------------------
-    const uMarta = await ctx.db.insert("usuarios", {
-      nombre: "Marta Ruiz",
-      email: "marta@vibecrm.es",
-      rol: "propietaria",
-    });
-    const uCarlos = await ctx.db.insert("usuarios", {
-      nombre: "Carlos Gómez",
-      email: "carlos@vibecrm.es",
-      rol: "comercial",
-    });
+    // --- usuarios -----------------------------------------------------
+    // Ya NO se insertan aquí: las cuentas reales las crea el bootstrap de
+    // autenticación (RAU-87, scripts/bootstrap-admin.mjs + convex/auth.ts).
+    // Este seed las busca por email y falla con un mensaje claro si el
+    // bootstrap no se ha ejecutado todavía.
+    const uMartaPerfil = await ctx.db
+      .query("usuarios")
+      .withIndex("by_email", (q) => q.eq("email", "marta@vibecrm.es"))
+      .unique();
+    const uCarlosPerfil = await ctx.db
+      .query("usuarios")
+      .withIndex("by_email", (q) => q.eq("email", "carlos@vibecrm.es"))
+      .unique();
+    if (uMartaPerfil === null || uCarlosPerfil === null) {
+      throw new Error(
+        "Ejecuta primero el bootstrap de autenticación (RAU-87, ver " +
+          "scripts/bootstrap-admin.mjs) para crear a Marta y Carlos antes " +
+          "de sembrar el resto de datos.",
+      );
+    }
+    const uMarta = uMartaPerfil._id;
+    const uCarlos = uCarlosPerfil._id;
 
     // --- clientes -----------------------------------------------------
     // fechaRegistro es una elección solo-seed (el mock no la define): alta

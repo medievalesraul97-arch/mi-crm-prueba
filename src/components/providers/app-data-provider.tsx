@@ -8,6 +8,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { ConvexError } from "convex/values";
+import { api } from "../../../convex/_generated/api";
 import type {
   CanalInteraccion,
   CanalOrigen,
@@ -108,16 +112,23 @@ export type RegistrarVentaResultado =
 
 export type LoginResultado = { ok: true } | { ok: false; error: string };
 
+export type CambiarPasswordInicialResultado =
+  | { ok: true }
+  | { ok: false; error: string };
+
 interface AppData {
   /** `true` hasta que el cliente resuelve `today` + fechas (evita mismatch SSR). */
   loading: boolean;
-  /** `true` cuando ya se leyó la sesión de localStorage (para el gate de auth). */
+  /** `true` cuando ya se resolvió el estado de sesión real (Convex Auth, RAU-87) - para el gate de auth. */
   authLoaded: boolean;
   today: Date | null;
   clientes: Cliente[];
   usuarios: Usuario[];
-  /** Usuario con sesión iniciada, o `null` si no hay sesión (login mock). */
+  /** Usuario con sesión iniciada (autenticación real, RAU-87), o `null` si no hay sesión. */
   currentUser: Usuario | null;
+  /** Cierto si el usuario autenticado tiene pendiente el cambio obligatorio
+   * de contraseña temporal (RAU-87 adenda) - `false` sin sesión. */
+  debeCambiarPassword: boolean;
   atrasados: SeguimientoEnriquecido[];
   paraHoy: SeguimientoEnriquecido[];
   pendientesCount: number;
@@ -149,10 +160,15 @@ interface AppData {
   ventasDeCliente: (clienteId: string) => VentaEnriquecida[];
   /** Registra una venta (RAU-69) y avanza `fechaUltimoContacto` del cliente. */
   registrarVenta: (input: RegistrarVentaInput) => RegistrarVentaResultado;
-  /** Login mock: valida por email (cualquier contraseña no vacía). */
-  login: (email: string, password: string) => LoginResultado;
-  logout: () => void;
-  setCurrentUser: (id: string) => void;
+  /** Login real (RAU-87, Convex Auth Password). Async: hace una llamada de red. */
+  login: (email: string, password: string) => Promise<LoginResultado>;
+  logout: () => Promise<void>;
+  /** Cambio obligatorio de la contraseña temporal (RAU-87 adenda). Sin
+   * "contraseña actual": solo funciona mientras debeCambiarPassword es
+   * cierto (ver convex/usuarios.ts, cambiarPasswordInicial). */
+  cambiarPasswordInicial: (
+    nuevaPassword: string,
+  ) => Promise<CambiarPasswordInicialResultado>;
 }
 
 const AppDataContext = createContext<AppData | null>(null);
@@ -162,8 +178,6 @@ export function useAppData(): AppData {
   if (!ctx) throw new Error("useAppData debe usarse dentro de <AppDataProvider>");
   return ctx;
 }
-
-const SESSION_KEY = "vibecrm_session";
 
 const validEmail = (email: string): boolean =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -287,6 +301,53 @@ export function validarVenta(
   return errors;
 }
 
+export interface ErroresLogin {
+  email?: string;
+  password?: string;
+}
+
+/**
+ * Validación pura de login (RAU-87), compartida por el formulario (errores
+ * en vivo tras el primer intento de envío, mismo patrón que las anteriores).
+ * Solo formato: no comprueba credenciales contra el backend, eso lo hace
+ * `login()` (Convex Auth). Textos exactos del diseño ("Introduce un email
+ * válido" / "Introduce tu contraseña"). Devuelve `{}` si no hay errores.
+ */
+export function validarLogin(email: string, password: string): ErroresLogin {
+  const errors: ErroresLogin = {};
+  if (!validEmail(email.trim())) errors.email = "Introduce un email válido";
+  if (!password.trim()) errors.password = "Introduce tu contraseña";
+  return errors;
+}
+
+export interface ErroresCambiarPasswordInicial {
+  nuevaPassword?: string;
+  repetir?: string;
+}
+
+/** Mismo mínimo que exige el backend (convex/usuarios.ts, MIN_PASSWORD). */
+const MIN_PASSWORD_INICIAL = 6;
+
+/**
+ * Validación pura del cambio de contraseña inicial (RAU-87 adenda),
+ * compartida por el formulario (errores en vivo tras el primer intento,
+ * mismo patrón que `validarLogin`). Textos exactos del diseño ("Mínimo 6
+ * caracteres" / "Las contraseñas no coinciden"). Devuelve `{}` si no hay
+ * errores.
+ */
+export function validarCambiarPasswordInicial(
+  nuevaPassword: string,
+  repetir: string,
+): ErroresCambiarPasswordInicial {
+  const errors: ErroresCambiarPasswordInicial = {};
+  if (nuevaPassword.length < MIN_PASSWORD_INICIAL) {
+    errors.nuevaPassword = "Mínimo 6 caracteres";
+  } else if (nuevaPassword !== repetir) {
+    errors.repetir = "Las contraseñas no coinciden";
+  }
+  return errors;
+}
+
 /** Resuelve la semilla de clientes a `Cliente[]` con la fecha real de último contacto. */
 function resolverClientes(hoy: Date): Cliente[] {
   return CLIENTES_SEMILLA.map((c) => ({
@@ -306,32 +367,29 @@ interface EstadoApp {
   seguimientos: Seguimiento[];
   interacciones: Interaccion[];
   ventas: Venta[];
-  sessionUserId: string | null;
-  authLoaded: boolean;
 }
 
-export function AppDataProvider({ children }: { children: ReactNode }) {
+/**
+ * Datos y mutaciones del CRM que siguen siendo 100% mock en memoria (RAU-87
+ * solo hace real la parte de usuarios/sesión; clientes/seguimientos/
+ * interacciones/ventas quedan sin tocar hasta una tarea futura que los
+ * conecte a Convex). `currentUser` se recibe como parámetro en vez de
+ * resolverse aquí dentro: lo calcula quien llame a este hook (con sesión
+ * real traducida al espacio de ids de `USUARIOS`, o `null` sin backend) -
+ * ver `AppDataProviderConAuth`/`AppDataProviderSinBackend` más abajo.
+ */
+function useMockCrmData(currentUser: Usuario | null) {
   const [state, setState] = useState<EstadoApp>({
     today: null,
     clientes: [],
     seguimientos: [],
     interacciones: [],
     ventas: [],
-    sessionUserId: null,
-    authLoaded: false,
   });
-  const {
-    today,
-    clientes,
-    seguimientos,
-    interacciones,
-    ventas,
-    sessionUserId,
-    authLoaded,
-  } = state;
+  const { today, clientes, seguimientos, interacciones, ventas } = state;
 
-  // Al montar (solo cliente): resolver fechas + leer la sesión de localStorage.
-  // Se hace tras montar para evitar el mismatch SSR/hidratación.
+  // Al montar (solo cliente): resolver fechas de la semilla. Se hace tras
+  // montar para evitar el mismatch SSR/hidratación.
   useEffect(() => {
     const hoy = startOfDay(new Date());
     const resueltos: Seguimiento[] = SEGUIMIENTOS_SEMILLA.map((s) => ({
@@ -360,13 +418,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       fecha: addDays(hoy, -v.fechaOffset),
       autorId: v.autorId,
     }));
-    let stored: string | null = null;
-    try {
-      stored = localStorage.getItem(SESSION_KEY);
-    } catch {
-      stored = null;
-    }
-    if (stored && !USUARIOS.some((u) => u.id === stored)) stored = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setState((s) => ({
       ...s,
@@ -382,8 +433,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       seguimientos: resueltos,
       interacciones: interaccionesResueltas,
       ventas: ventasResueltas,
-      sessionUserId: stored,
-      authLoaded: true,
     }));
   }, []);
 
@@ -397,9 +446,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     () => new Map(USUARIOS.map((u) => [u.id, u])),
     [],
   );
-  const currentUser = sessionUserId
-    ? usuarioPorId.get(sessionUserId) ?? null
-    : null;
 
   const { atrasados, paraHoy } = useMemo(() => {
     const vacio = {
@@ -643,44 +689,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }
 
-  function persistSession(id: string | null) {
-    try {
-      if (id) localStorage.setItem(SESSION_KEY, id);
-      else localStorage.removeItem(SESSION_KEY);
-    } catch {
-      // localStorage no disponible: la sesión no persiste, pero no rompe.
-    }
-  }
-
-  function login(email: string, password: string): LoginResultado {
-    const user = USUARIOS.find(
-      (u) => u.email.toLowerCase() === email.trim().toLowerCase(),
-    );
-    if (!user || !password.trim()) {
-      return { ok: false, error: "Email o contraseña incorrectos" };
-    }
-    setState((s) => ({ ...s, sessionUserId: user.id }));
-    persistSession(user.id);
-    return { ok: true };
-  }
-
-  function logout() {
-    setState((s) => ({ ...s, sessionUserId: null }));
-    persistSession(null);
-  }
-
-  function setCurrentUser(id: string) {
-    setState((s) => ({ ...s, sessionUserId: id }));
-    persistSession(id);
-  }
-
-  const value: AppData = {
+  return {
     loading,
-    authLoaded,
     today,
     clientes,
     usuarios: USUARIOS,
-    currentUser,
     atrasados,
     paraHoy,
     pendientesCount,
@@ -695,12 +708,129 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     ventas,
     ventasDeCliente,
     registrarVenta,
-    login,
-    logout,
-    setCurrentUser,
   };
+}
 
+/**
+ * Variante sin backend: replica el comportamiento de antes de que
+ * `NEXT_PUBLIC_CONVEX_URL` estuviera configurada (arranque sin romper,
+ * `authLoaded` inmediato, sin sesión posible). Cero hooks de Convex Auth -
+ * necesario porque `ConvexClientProvider` no monta ningún provider de
+ * Convex en este caso (ver convex-client-provider.tsx), y los hooks de
+ * Convex Auth no se pueden llamar sin uno.
+ */
+function AppDataProviderSinBackend({ children }: { children: ReactNode }) {
+  const mock = useMockCrmData(null);
+  const value: AppData = {
+    ...mock,
+    authLoaded: true,
+    currentUser: null,
+    debeCambiarPassword: false,
+    login: async () => ({
+      ok: false,
+      error: "Backend no configurado (falta NEXT_PUBLIC_CONVEX_URL).",
+    }),
+    logout: async () => {},
+    cambiarPasswordInicial: async () => ({
+      ok: false,
+      error: "Backend no configurado (falta NEXT_PUBLIC_CONVEX_URL).",
+    }),
+  };
   return (
     <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
+  );
+}
+
+/**
+ * Variante real (RAU-87): único sitio del provider que llama a
+ * useConvexAuth/useAuthActions/useQuery. `currentUser` se traduce al
+ * espacio de ids de `USUARIOS` (mock) por email - el subsistema de
+ * seguimientos/interacciones/ventas sigue siendo 100% mock y no entiende
+ * los `_id` reales de Convex; ver plan RAU-87 para el razonamiento
+ * completo. Invariante que esto exige: el bootstrap (scripts/
+ * bootstrap-admin.mjs) crea las cuentas con exactamente los mismos emails
+ * que ya usa `USUARIOS` (marta@vibecrm.es / carlos@vibecrm.es).
+ */
+function AppDataProviderConAuth({ children }: { children: ReactNode }) {
+  const { isLoading: authLoading, isAuthenticated } = useConvexAuth();
+  const { signIn, signOut } = useAuthActions();
+  const authUserRaw = useQuery(
+    api.usuarios.obtenerActual,
+    isAuthenticated ? {} : "skip",
+  );
+
+  const currentUser: Usuario | null = authUserRaw
+    ? {
+        id:
+          USUARIOS.find((u) => u.email === authUserRaw.email)?.id ??
+          authUserRaw._id,
+        nombre: authUserRaw.nombre,
+        email: authUserRaw.email,
+        rol: authUserRaw.rol,
+      }
+    : null;
+  const debeCambiarPassword = authUserRaw?.debeCambiarPassword ?? false;
+  const authLoaded = !authLoading && (!isAuthenticated || authUserRaw !== undefined);
+
+  const mock = useMockCrmData(currentUser);
+  const cambiarPasswordInicialAction = useAction(api.usuarios.cambiarPasswordInicial);
+
+  async function login(email: string, password: string): Promise<LoginResultado> {
+    try {
+      await signIn("password", { email, password, flow: "signIn" });
+      return { ok: true };
+    } catch {
+      // Mensaje fijo: no filtra si el email existe o la contraseña es la
+      // incorrecta (mismo texto que el diseño exige).
+      return { ok: false, error: "Email o contraseña incorrectos" };
+    }
+  }
+
+  async function logout(): Promise<void> {
+    // `signOut()` debe esperarse de verdad: si quien llama navega a /login
+    // antes de que termine, /login puede ver authLoaded && currentUser
+    // todavía activos y rebotar de vuelta a /hoy (condición de carrera).
+    await signOut();
+  }
+
+  async function cambiarPasswordInicial(
+    nuevaPassword: string,
+  ): Promise<CambiarPasswordInicialResultado> {
+    try {
+      await cambiarPasswordInicialAction({ nuevaPassword });
+      return { ok: true };
+    } catch (err) {
+      // ConvexError con `data` string (p. ej. "temporal caducada") se
+      // muestra tal cual; cualquier otra forma (incluida la validación de
+      // longitud, que el formulario ya evita mandar) cae a un mensaje
+      // genérico - no se filtra el detalle interno.
+      const mensaje =
+        err instanceof ConvexError && typeof err.data === "string"
+          ? err.data
+          : "No se pudo cambiar la contraseña. Inténtalo de nuevo.";
+      return { ok: false, error: mensaje };
+    }
+  }
+
+  const value: AppData = {
+    ...mock,
+    authLoaded,
+    currentUser,
+    debeCambiarPassword,
+    login,
+    logout,
+    cambiarPasswordInicial,
+  };
+  return (
+    <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
+  );
+}
+
+export function AppDataProvider({ children }: { children: ReactNode }) {
+  const tieneBackend = !!process.env.NEXT_PUBLIC_CONVEX_URL;
+  return tieneBackend ? (
+    <AppDataProviderConAuth>{children}</AppDataProviderConAuth>
+  ) : (
+    <AppDataProviderSinBackend>{children}</AppDataProviderSinBackend>
   );
 }

@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
 // Esquema de Vibe CRM (RAU-63). Traduce los tipos de `src/lib/types.ts` al
 // modelo de datos de Convex. Convenciones:
@@ -16,7 +17,10 @@ import { v } from "convex/values";
 // fecha_vencimiento→vence, fecha_hecho→fechaHecho, fecha_creacion→_creationTime.
 //
 // Desviaciones deliberadas respecto a la issue (acordadas el 14/8/2026):
-//  - `usuarios` sin password_hash: el login real (bcrypt) llega en RAU-87.
+//  - `usuarios` sin password_hash propio: la autenticación real (RAU-87) usa
+//    @convex-dev/auth (`...authTables`, tabla `users` fija de la librería,
+//    hash Scrypt vía Lucia); `usuarios` es el perfil CRM, vinculado 1:1 a
+//    `users` por `authUserId`, no la fuente de credenciales.
 //  - `clientes` sin prioridad: campo y migración llegan en RAU-90.
 //
 // INVARIANTE OBLIGATORIO para toda mutation futura (RAU-69/72/116…):
@@ -43,14 +47,38 @@ import { v } from "convex/values";
 // con backfill y reversa definidos.
 
 export default defineSchema({
-  // Usuarios del CRM (RAU-75/87). Personas: Marta (propietaria) y Carlos (comercial).
+  // Tablas de @convex-dev/auth (RAU-87): users, authSessions, authAccounts,
+  // authRefreshTokens, authVerificationCodes, authVerifiers, authRateLimits.
+  // Sin modificar - la librería exige el nombre `users` fijo, no configurable.
+  ...authTables,
+
+  // Perfil CRM de cada persona (RAU-75/87). Personas: Marta (propietaria) y
+  // Carlos (comercial). Tabla separada de `users` (no fusionada): vinculada
+  // 1:1 vía `authUserId`, para no acoplar campos de negocio al ciclo de vida
+  // de la librería de auth ni migrar los FKs existentes de seguimientos/
+  // interacciones/ventas (ver plan RAU-87 para el razonamiento completo).
   usuarios: defineTable({
+    // Optional: los perfiles creados por el bootstrap de RAU-87 lo rellenan
+    // al vincularse; en teoría todo perfil vivo debería tenerlo, pero no se
+    // exige a nivel de esquema para no bloquear un perfil huérfano futuro.
+    authUserId: v.optional(v.id("users")),
     nombre: v.string(),
     email: v.string(),
     rol: v.union(v.literal("propietaria"), v.literal("comercial")),
+    // Cierto al crear una cuenta (bootstrap RAU-87 hoy; RAU-111 más adelante
+    // para altas desde Equipo) - obliga a cambiar la contraseña en el primer
+    // login antes de dejar pasar a AuthGate (y antes de requireIdentity).
+    debeCambiarPassword: v.optional(v.boolean()),
+    // Caducidad de la contraseña temporal (epoch ms) - solo tiene efecto
+    // mientras debeCambiarPassword es true; beforeSessionCreation y
+    // cambiarPasswordInicial (convex/auth.ts, convex/usuarios.ts) rechazan
+    // si ya pasó. Se renueva al reemitir (reemitirPasswordTemporal).
+    passwordTemporalExpiraEn: v.optional(v.number()),
   })
     // Login por email (RAU-87) y chequeo de unicidad en las mutations de alta.
-    .index("by_email", ["email"]),
+    .index("by_email", ["email"])
+    // Resolver el perfil CRM del usuario autenticado (RAU-87, requireIdentity).
+    .index("by_authUserId", ["authUserId"]),
 
   // Clientes / oportunidades (RAU-65/66/68).
   clientes: defineTable({

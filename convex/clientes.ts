@@ -3,15 +3,15 @@
 // schema + model layer (RAU-63). Conectar la UI a estas funciones queda
 // fuera de alcance (tarea futura); esto es solo la capa de datos.
 //
-// SEGURIDAD (ver plan RAU-67): estas 4 funciones NO tienen autorización real
-// (ctx.auth) porque no existe autenticación todavía (RAU-87, sin empezar).
-// requireApiTemporalmenteHabilitada() es una barrera de entorno TEMPORAL,
-// aceptada por la Auditoría solo para un deployment dev aislado y sin datos
-// reales - no es autorización ni sustituye a RAU-87. Retirar esta barrera y
-// sustituirla por ctx.auth/requireIdentity en cuanto RAU-87 esté implementado.
+// SEGURIDAD (RAU-87): las 4 funciones exigen sesión real vía
+// requireIdentity (convex/model/auth.ts) - reemplaza la barrera temporal de
+// entorno que usaba este archivo hasta RAU-87. Cualquier persona
+// autenticada (propietaria o comercial) puede usarlas: Clientes es una
+// pantalla común a ambos roles según el diseño.
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import schema from "./schema";
+import { requireIdentity } from "./model/auth";
 import {
   clienteValidator,
   crearCliente,
@@ -20,18 +20,6 @@ import {
   validarClienteAlta,
   validarClienteEdicion,
 } from "./model/clientes";
-
-// Barrera temporal: lanza si no está explícitamente habilitada - no hay `if`
-// que los handlers puedan olvidar, porque no exponemos un boolean, exponemos
-// el throw.
-function requireApiTemporalmenteHabilitada(): void {
-  if (process.env.CLIENTES_API_SIN_AUTH_PERMITIDO !== "true") {
-    throw new Error(
-      "API de clientes deshabilitada: falta autorización real (RAU-87). " +
-        "Definir CLIENTES_API_SIN_AUTH_PERMITIDO=true solo en el deployment dev.",
-    );
-  }
-}
 
 // Validadores de las entidades asociadas a la ficha (para `obtener`).
 // Derivados del schema igual que clienteValidator: cero duplicación de
@@ -68,7 +56,7 @@ export const crear = mutation({
   },
   returns: clienteValidator,
   handler: async (ctx, args) => {
-    requireApiTemporalmenteHabilitada();
+    await requireIdentity(ctx);
 
     const normalizado = normalizarDatosCliente(args);
     const nota = args.nota?.trim() || undefined;
@@ -102,7 +90,7 @@ export const listar = query({
   args: { busqueda: v.optional(v.string()) },
   returns: v.array(clienteValidator),
   handler: async (ctx, args) => {
-    requireApiTemporalmenteHabilitada();
+    await requireIdentity(ctx);
 
     // Seguro sin ningún chequeo adicional aquí: crearCliente ya garantiza el
     // límite funcional en escritura para cualquier llamador (ver plan RAU-67).
@@ -144,7 +132,7 @@ export const obtener = query({
     }),
   ),
   handler: async (ctx, args) => {
-    requireApiTemporalmenteHabilitada();
+    await requireIdentity(ctx);
 
     const cliente = await ctx.db.get(args.id);
     if (cliente === null) return null;
@@ -206,7 +194,7 @@ export const actualizar = mutation({
   },
   returns: clienteValidator,
   handler: async (ctx, args) => {
-    requireApiTemporalmenteHabilitada();
+    await requireIdentity(ctx);
 
     const existente = await ctx.db.get(args.id);
     if (existente === null) {
