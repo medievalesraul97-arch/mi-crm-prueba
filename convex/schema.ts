@@ -27,8 +27,11 @@ import { v } from "convex/values";
 //
 // Reglas de negocio que el esquema NO puede expresar y viven en mutations:
 //  - unicidad de `usuarios.email` (chequear con el índice by_email; RAU-87/111)
-//  - cliente con al menos teléfono o email; importe de venta > 0 y <= 1e9
-//    (validaciones puras ya existentes en app-data-provider.tsx / format.ts)
+//  - cliente con al menos teléfono o email EN LA CREACIÓN (RAU-66/67); no se
+//    re-exige al editar (`actualizar`, RAU-67) - un cliente existente puede
+//    quedar sin ningún contacto tras una edición, decisión explícita de la
+//    issue, no un descuido. Importe de venta > 0 y <= 1e9 (validaciones
+//    puras ya existentes en app-data-provider.tsx / format.ts).
 //  - no eliminar el último usuario con rol "propietaria" (RAU-88/RAU-111)
 //
 // Migraciones: el criterio "versionadas y reversibles" de la issue queda
