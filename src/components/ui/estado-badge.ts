@@ -11,6 +11,7 @@ export const ESTADO_CLIENTE_BADGE: Record<
 > = {
   nuevo: { label: "Nuevo lead", tone: "info" },
   negociacion: { label: "En negociación", tone: "primary" },
+  pendiente: { label: "Pendiente", tone: "warning" },
   ganado: { label: "Ganado", tone: "success" },
   perdido: { label: "Perdido", tone: "error" },
 };

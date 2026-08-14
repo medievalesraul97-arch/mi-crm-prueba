@@ -7,7 +7,12 @@ export interface Usuario {
   rol: Rol;
 }
 
-export type EstadoCliente = "nuevo" | "negociacion" | "ganado" | "perdido";
+export type EstadoCliente =
+  | "nuevo"
+  | "negociacion"
+  | "pendiente"
+  | "ganado"
+  | "perdido";
 
 export type CanalOrigen = "web" | "redes" | "email" | "whatsapp";
 
