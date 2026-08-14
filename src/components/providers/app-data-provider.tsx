@@ -162,6 +162,14 @@ interface AppData {
   registrarVenta: (input: RegistrarVentaInput) => RegistrarVentaResultado;
   /** Login real (RAU-87, Convex Auth Password). Async: hace una llamada de red. */
   login: (email: string, password: string) => Promise<LoginResultado>;
+  /** Inicia el login con Google (RAU-213): redirige el navegador a Google.
+   * El resultado (éxito/rechazo) vuelve a `/login` por URL, no por el valor
+   * resuelto de esta promesa - ver `completarLoginGoogle`. */
+  loginConGoogle: () => Promise<LoginResultado>;
+  /** Completa el login con Google tras volver de Google con `?code=` en la
+   * URL (RAU-213). Rechaza con el mismo shape que `login` si el código ya
+   * no es válido (reintento, expirado). */
+  completarLoginGoogle: (code: string) => Promise<LoginResultado>;
   logout: () => Promise<void>;
   /** Cambio obligatorio de la contraseña temporal (RAU-87 adenda). Sin
    * "contraseña actual": solo funciona mientras debeCambiarPassword es
@@ -730,6 +738,14 @@ function AppDataProviderSinBackend({ children }: { children: ReactNode }) {
       ok: false,
       error: "Backend no configurado (falta NEXT_PUBLIC_CONVEX_URL).",
     }),
+    loginConGoogle: async () => ({
+      ok: false,
+      error: "Backend no configurado (falta NEXT_PUBLIC_CONVEX_URL).",
+    }),
+    completarLoginGoogle: async () => ({
+      ok: false,
+      error: "Backend no configurado (falta NEXT_PUBLIC_CONVEX_URL).",
+    }),
     logout: async () => {},
     cambiarPasswordInicial: async () => ({
       ok: false,
@@ -786,6 +802,47 @@ function AppDataProviderConAuth({ children }: { children: ReactNode }) {
     }
   }
 
+  async function loginConGoogle(): Promise<LoginResultado> {
+    try {
+      // redirectTo es obligatorio, no cosmético (RAU-213): sin él, el
+      // callback de @convex-dev/auth manda tanto el éxito como el rechazo a
+      // SITE_URL a secas (no a /login), y GoogleRedirectHandler nunca vería
+      // ni el `code` ni la señal de rechazo. El marcador `oauthIntento`
+      // sobrevive tal cual al viaje de ida y vuelta (ver login/page.tsx).
+      await signIn("google", { redirectTo: "/login?oauthIntento=google" });
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "No se pudo iniciar el acceso con Google." };
+    }
+  }
+
+  async function completarLoginGoogle(code: string): Promise<LoginResultado> {
+    try {
+      // El tipo público de `signIn` (useAuthActions) exige `provider:
+      // string`, pero en runtime acepta `undefined` para completar un
+      // código OAuth ya iniciado - es EXACTAMENTE lo que hace el manejo
+      // automático interno de la librería
+      // (@convex-dev/auth/dist/react/client.js: `await signIn(undefined, {
+      // code })`, mismo closure que expone este hook). Necesitamos llamarlo
+      // así porque `shouldHandleCode={false}` (convex-client-provider.tsx)
+      // desactiva ese manejo automático a propósito, para poder mostrar el
+      // rechazo de vincularUsuarioGoogle en vez de tragárselo en silencio.
+      await (
+        signIn as unknown as (
+          provider: string | undefined,
+          params?: Record<string, unknown>,
+        ) => Promise<unknown>
+      )(undefined, { code });
+      return { ok: true };
+    } catch {
+      return {
+        ok: false,
+        error:
+          "No se pudo completar el acceso con Google. Si tu cuenta no está autorizada, pide que te den de alta.",
+      };
+    }
+  }
+
   async function logout(): Promise<void> {
     // `signOut()` debe esperarse de verdad: si quien llama navega a /login
     // antes de que termine, /login puede ver authLoaded && currentUser
@@ -818,6 +875,8 @@ function AppDataProviderConAuth({ children }: { children: ReactNode }) {
     currentUser,
     debeCambiarPassword,
     login,
+    loginConGoogle,
+    completarLoginGoogle,
     logout,
     cambiarPasswordInicial,
   };

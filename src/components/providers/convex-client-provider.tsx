@@ -22,5 +22,15 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  return <ConvexAuthProvider client={convex}>{children}</ConvexAuthProvider>;
+  return (
+    // shouldHandleCode=false (RAU-213): el manejo automático de `?code=` de
+    // la librería no distingue "rechazado por el servidor" de "todavía no
+    // se ha intentado nada" (ambos vuelven sin `code`) y su intercambio
+    // corre en un efecto interno sin try/catch, así que un rechazo de
+    // Google nunca llegaría a mostrarse - login/page.tsx lo maneja a mano
+    // (GoogleRedirectHandler) para poder mostrar un error visible.
+    <ConvexAuthProvider client={convex} shouldHandleCode={false}>
+      {children}
+    </ConvexAuthProvider>
+  );
 }
