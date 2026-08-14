@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as clientes from "../clientes.js";
 import type * as model_clientes from "../model/clientes.js";
 import type * as seed from "../seed.js";
 
@@ -18,6 +19,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  clientes: typeof clientes;
   "model/clientes": typeof model_clientes;
   seed: typeof seed;
 }>;
