@@ -763,9 +763,10 @@ function AppDataProviderSinBackend({ children }: { children: ReactNode }) {
  * espacio de ids de `USUARIOS` (mock) por email - el subsistema de
  * seguimientos/interacciones/ventas sigue siendo 100% mock y no entiende
  * los `_id` reales de Convex; ver plan RAU-87 para el razonamiento
- * completo. Invariante que esto exige: el bootstrap (scripts/
- * bootstrap-admin.mjs) crea las cuentas con exactamente los mismos emails
- * que ya usa `USUARIOS` (marta@vibecrm.es / carlos@vibecrm.es).
+ * completo. Invariante que esto exige: el email de cada fila `usuarios` en
+ * Convex (el del bootstrap, scripts/bootstrap-admin.mjs, o el migrado por
+ * RAU-213 para la propietaria) debe coincidir exactamente con el de la
+ * fila correspondiente en `USUARIOS` (mock, src/lib/mock/data.ts).
  */
 function AppDataProviderConAuth({ children }: { children: ReactNode }) {
   const { isLoading: authLoading, isAuthenticated } = useConvexAuth();
@@ -817,6 +818,11 @@ function AppDataProviderConAuth({ children }: { children: ReactNode }) {
   }
 
   async function completarLoginGoogle(code: string): Promise<LoginResultado> {
+    const rechazo: LoginResultado = {
+      ok: false,
+      error:
+        "No se pudo completar el acceso con Google. Si tu cuenta no está autorizada, pide que te den de alta.",
+    };
     try {
       // El tipo público de `signIn` (useAuthActions) exige `provider:
       // string`, pero en runtime acepta `undefined` para completar un
@@ -827,19 +833,22 @@ function AppDataProviderConAuth({ children }: { children: ReactNode }) {
       // así porque `shouldHandleCode={false}` (convex-client-provider.tsx)
       // desactiva ese manejo automático a propósito, para poder mostrar el
       // rechazo de vincularUsuarioGoogle en vez de tragárselo en silencio.
-      await (
+      //
+      // Un código inválido/caducado/ya consumido NO lanza: verifyCodeOnly
+      // (@convex-dev/auth/src/server/implementation/mutations/
+      // verifyCodeAndSignIn.ts) devuelve `null` en ese caso, que el cliente
+      // traduce en `{ signingIn: false }` sin excepción (hallazgo de
+      // Auditoría sobre este mismo commit) - hay que comprobar `signingIn`
+      // explícitamente, no asumir éxito por la sola ausencia de throw.
+      const resultado = (await (
         signIn as unknown as (
           provider: string | undefined,
           params?: Record<string, unknown>,
-        ) => Promise<unknown>
-      )(undefined, { code });
-      return { ok: true };
+        ) => Promise<{ signingIn: boolean }>
+      )(undefined, { code })) as { signingIn: boolean };
+      return resultado.signingIn ? { ok: true } : rechazo;
     } catch {
-      return {
-        ok: false,
-        error:
-          "No se pudo completar el acceso con Google. Si tu cuenta no está autorizada, pide que te den de alta.",
-      };
+      return rechazo;
     }
   }
 
